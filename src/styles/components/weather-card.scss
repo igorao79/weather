@@ -1,0 +1,198 @@
+.weather-card {
+  background-color: var(--primary-color);
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(5px);
+  background-color: rgba(30, 33, 58, 0.8);
+  
+
+  
+  &__map {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(rgba(30, 33, 58, 0.4), rgba(30, 33, 58, 0.9));
+      z-index: 1;
+      pointer-events: none;
+    }
+    
+    iframe {
+      width: 100%;
+      height: 110%; /* Немного больше для компенсации масштабирования */
+      opacity: 0.6;
+      filter: grayscale(50%) contrast(110%) brightness(60%);
+      transform: scale(1.1); /* Небольшое увеличение карты для заполнения контейнера */
+      transition: all 0.3s ease;
+      pointer-events: none; /* Отключаем взаимодействие с картой в фоне */
+    }
+    
+    &--loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(30, 33, 58, 0.8);
+      
+      .loading-indicator {
+        color: var(--light-text-color);
+        font-size: 0.9rem;
+        background-color: rgba(0, 0, 0, 0.3);
+        padding: 8px 16px;
+        border-radius: 8px;
+        z-index: 0;
+      }
+    }
+  }
+  
+  &__refresh-image {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(5px);
+    z-index: 1;
+    opacity: 0.5;
+    
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+      transform: rotate(30deg);
+      opacity: 1;
+    }
+    
+    &:active {
+      transform: rotate(60deg) scale(0.95);
+    }
+    
+    &:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      transform: none;
+    }
+  }
+  
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    position: relative;
+    
+    &-left {
+      flex: 1;
+    }
+  }
+  
+  &__title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+  
+  &__date {
+    color: var(--light-text-color);
+    font-size: 0.9rem;
+  }
+  
+  &__time {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(45deg, #a6c0fe, #f68084);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    padding: 0 10px;
+    border-radius: 8px;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+  }
+  
+  &__content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  &__temp {
+    font-size: 4rem;
+    font-weight: 700;
+    margin: 10px 0;
+    
+    &-unit {
+      font-size: 2rem;
+      vertical-align: top;
+      font-weight: 400;
+    }
+  }
+  
+  &__description {
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+    text-transform: capitalize;
+  }
+  
+  &__icon {
+    width: 100px;
+    height: 100px;
+    margin: 10px 0;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+    
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  }
+  
+  &__details {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-top: 20px;
+    width: 100%;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  &__detail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    
+    &-label {
+      color: var(--light-text-color);
+      font-size: 0.8rem;
+      margin-bottom: 5px;
+    }
+    
+    &-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+  }
+} 

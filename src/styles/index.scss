@@ -1,0 +1,666 @@
+    
+/* Переменные */
+:root {
+  --primary-color: #1E213A;
+  --secondary-color: #100E1D;
+  --text-color: #E7E7EB;
+  --light-text-color: #A09FB1;
+  --highlight-color: #3C47E9;
+  --shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+  --error-color: #ff5b5b;
+  
+  /* Weather animation colors */
+  --sun-color: #ffdc7a;
+  --sun-glow: rgba(255, 220, 122, 0.5);
+  --moon-color: #f5f3ce;
+  --moon-glow: rgba(245, 243, 206, 0.3);
+  --star-color: #ffffff;
+  --lightning-color: #f9f9a6;
+  --cloud-color: rgba(255, 255, 255, 0.8);
+  --raindrop-color: rgba(255, 255, 255, 0.7);
+  --snow-color: #ffffff;
+  --mist-color: rgba(255, 255, 255, 0.3);
+
+  /* Animation timing */
+  --cloud-init-position: -50px;  /* Make clouds start closer to view */
+  --cloud-speed-multiplier: 0.6; /* Lower values = faster clouds */
+}
+
+/* Сброс стилей */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Raleway', sans-serif;
+  background-color: var(--secondary-color);
+  color: var(--text-color);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+/* Утилиты */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  position: relative;
+  z-index: 2;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+    overflow: hidden;
+  }
+}
+
+/* Типографика */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+/* Анимации для сообщений об ошибке */
+.error-message {
+  background-color: rgba(255, 97, 97, 0.8);
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  animation: fadeIn 0.3s ease;
+}
+
+/* Базовая анимация загрузки */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Скроллбар */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--highlight-color);
+  border-radius: 10px;
+}
+
+/* Полезные утилиты */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Фиксы для мобильных устройств */
+@media (max-width: 768px) {
+  .forecast__item--expanded {
+    position: relative !important;
+    z-index: 100 !important;
+  }
+  
+  /* Решение проблемы с скроллом на мобильных */
+  html, body {
+    overflow-x: hidden;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Фоны для разных погодных условий */
+.weather-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  transition: background 0.5s ease;
+  overflow: hidden;
+  
+  &--clear {
+    &.weather-background--day {
+      background: linear-gradient(to bottom, #4ca1af, #c4e0e5);
+    }
+    
+    &.weather-background--morning {
+      background: linear-gradient(to bottom, #fdc830, #f37335);
+    }
+    
+    &.weather-background--evening {
+      background: linear-gradient(to bottom, #614385, #516395);
+    }
+    
+    &.weather-background--night {
+      background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
+    }
+  }
+  
+  &--clouds {
+    &.weather-background--day {
+      background: linear-gradient(to bottom, #606c88, #3f4c6b);
+    }
+    
+    &.weather-background--morning {
+      background: linear-gradient(to bottom, #8e9eab, #eef2f3);
+    }
+    
+    &.weather-background--evening {
+      background: linear-gradient(to bottom, #3a1c71, #d76d77, #ffaf7b);
+    }
+    
+    &.weather-background--night {
+      background: linear-gradient(to bottom, #232526, #414345);
+    }
+  }
+  
+  &--rain {
+    &.weather-background--day {
+      background: linear-gradient(to bottom, #2c3e50, #4ca1af);
+    }
+    
+    &.weather-background--morning {
+      background: linear-gradient(to bottom, #5c258d, #4389a2);
+    }
+    
+    &.weather-background--evening {
+      background: linear-gradient(to bottom, #614385, #516395);
+    }
+    
+    &.weather-background--night {
+      background: linear-gradient(to bottom, #1F1C2C, #928DAB);
+    }
+  }
+  
+  &--snow {
+    &.weather-background--day {
+      background: linear-gradient(to bottom, #757f9a, #d7dde8);
+    }
+    
+    &.weather-background--morning {
+      background: linear-gradient(to bottom, #bdc3c7, #2c3e50);
+    }
+    
+    &.weather-background--evening {
+      background: linear-gradient(to bottom, #5c258d, #4389a2);
+    }
+    
+    &.weather-background--night {
+      background: linear-gradient(to bottom, #0F2027, #203A43, #2C5364);
+    }
+  }
+  
+  &--storm {
+    &.weather-background--day {
+      background: linear-gradient(to bottom, #232526, #414345);
+    }
+    
+    &.weather-background--morning {
+      background: linear-gradient(to bottom, #373b44, #4286f4);
+    }
+    
+    &.weather-background--evening {
+      background: linear-gradient(to bottom, #200122, #6f0000);
+    }
+    
+    &.weather-background--night {
+      background: linear-gradient(to bottom, #0B0B0B, #1A1A1A);
+    }
+  }
+  
+  &--mist {
+    &.weather-background--day {
+      background: linear-gradient(to bottom, #8e9eab, #eef2f3);
+    }
+    
+    &.weather-background--morning {
+      background: linear-gradient(to bottom, #bdc3c7, #2c3e50);
+    }
+    
+    &.weather-background--evening {
+      background: linear-gradient(to bottom, #414d0b, #727a17);
+    }
+    
+    &.weather-background--night {
+      background: linear-gradient(to bottom, #1F1C2C, #928DAB);
+    }
+  }
+  
+  &__city-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.4;
+    transition: opacity 1s ease;
+    z-index: -1;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, 
+        rgba(0, 0, 0, 0.3), 
+        rgba(0, 0, 0, 0.5)
+      );
+    }
+  }
+  
+  &__weather-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.4;
+    transition: opacity 1s ease;
+    z-index: -1;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, 
+        rgba(0, 0, 0, 0.3), 
+        rgba(0, 0, 0, 0.5)
+      );
+    }
+  }
+}
+
+/* Анимации погоды */
+.weather-animation {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  
+  /* Солнце */
+  &__sun {
+    position: absolute;
+    top: 10%;
+    right: 10%;
+    width: 80px;
+    height: 80px;
+    animation: sunMovement 120s linear infinite;
+  }
+  
+  &__sun-circle {
+    width: 100%;
+    height: 100%;
+    background: var(--sun-color);
+    border-radius: 50%;
+    box-shadow: 0 0 40px 20px var(--sun-glow);
+    animation: sunPulsate 5s ease-in-out infinite alternate;
+  }
+  
+  &__sun-rays {
+    position: absolute;
+    top: -30px;
+    left: -30px;
+    right: -30px;
+    bottom: -30px;
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 50%, rgba(255, 220, 122, 0.2) 100%);
+    animation: sunRays 60s linear infinite;
+  }
+  
+  &__sun-flare {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    opacity: 0.3;
+    background: radial-gradient(circle at 60% 40%, var(--sun-color) 0%, transparent 70%);
+    animation: flareShift 8s ease-in-out infinite alternate;
+  }
+  
+  /* Луна */
+  &__moon {
+    position: absolute;
+    top: 15%;
+    right: 15%;
+    width: 60px;
+    height: 60px;
+    animation: moonMovement 180s linear infinite;
+  }
+  
+  &__moon-circle {
+    width: 100%;
+    height: 100%;
+    background: var(--moon-color);
+    border-radius: 50%;
+    box-shadow: 0 0 20px 10px var(--moon-glow);
+    animation: moonGlow 8s ease-in-out infinite alternate;
+  }
+  
+  &__moon-craters {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: 
+      radial-gradient(circle at 30% 30%, rgba(200, 200, 200, 0.2) 0%, rgba(200, 200, 200, 0) 8%),
+      radial-gradient(circle at 65% 40%, rgba(200, 200, 200, 0.2) 0%, rgba(200, 200, 200, 0) 10%),
+      radial-gradient(circle at 50% 70%, rgba(200, 200, 200, 0.2) 0%, rgba(200, 200, 200, 0) 12%);
+  }
+  
+  /* Звезды */
+  &__stars {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  
+  &__star {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: var(--star-color);
+    border-radius: 50%;
+    box-shadow: 0 0 5px var(--star-color), 0 0 10px var(--star-color);
+    animation: twinkle 3s ease-in-out infinite;
+    
+    &--type-0 {
+      animation: twinkle 3s ease-in-out infinite;
+    }
+    
+    &--type-1 {
+      animation: twinkle2 5s ease-in-out infinite;
+    }
+    
+    &--type-2 {
+      animation: twinkle3 7s ease-in-out infinite;
+    }
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      transform: scale(2);
+      opacity: 0;
+      background: transparent;
+      box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+      animation: starPulse 4s ease-in-out infinite;
+    }
+  }
+  
+  /* Дождь */
+  &__rain {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  
+  &__raindrop {
+    position: absolute;
+    top: -20px;
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--raindrop-color));
+    animation: rain linear infinite;
+  }
+  
+  /* Снег */
+  &__snow {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  
+  &__snowflake {
+    position: absolute;
+    top: -10px;
+    background-color: var(--snow-color);
+    border-radius: 50%;
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+    animation: snowfall linear infinite;
+  }
+  
+  /* Облака */
+  &__clouds {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  
+  &__cloud {
+    position: absolute;
+    width: 200px;
+    height: 60px;
+    background-color: var(--cloud-color);
+    border-radius: 50px;
+    animation: cloudDrift linear infinite;
+    /* Start with clouds already in view */
+    animation-delay: calc(var(--cloud-speed-multiplier) * -20s) !important;
+    
+    &::before, &::after {
+      content: '';
+      position: absolute;
+      background-color: var(--cloud-color);
+      border-radius: 50%;
+    }
+    
+    &::before {
+      width: 100px;
+      height: 100px;
+      top: -50px;
+      left: 30px;
+    }
+    
+    &::after {
+      width: 80px;
+      height: 80px;
+      top: -30px;
+      right: 30px;
+    }
+  }
+  
+  /* Молния */
+  &__lightning {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  
+  &__bolt {
+    position: absolute;
+    top: 10%;
+    width: 12px;
+    height: 150px;
+    background: var(--lightning-color);
+    opacity: 0;
+    filter: blur(1px);
+    box-shadow: 0 0 20px 5px rgba(249, 249, 166, 0.8);
+    animation: lightningBolt 10s infinite;
+    transform-origin: top center;
+    transform: rotate(15deg);
+    
+    &::before {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 80px;
+      background: var(--lightning-color);
+      transform: rotate(25deg);
+      top: 40px;
+      left: -30px;
+      filter: blur(1px);
+      box-shadow: 0 0 20px 5px rgba(249, 249, 166, 0.8);
+    }
+  }
+  
+  /* Туман */
+  &__mist {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  &__mist-layer {
+    position: absolute;
+    left: 0;
+    width: 200%;
+    height: 40px;
+    background: linear-gradient(to right, 
+      transparent 0%,
+      var(--mist-color) 20%,
+      var(--mist-color) 80%,
+      transparent 100%
+    );
+    animation: mistDrift linear infinite alternate;
+    filter: blur(8px);
+    border-radius: 50%;
+  }
+}
+
+/* Ключевые кадры для анимаций */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes twinkle2 {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  30% { opacity: 0.7; transform: scale(1.1); }
+  70% { opacity: 1; transform: scale(0.9); }
+}
+
+@keyframes twinkle3 {
+  0%, 100% { opacity: 0.1; transform: scale(0.9); }
+  20%, 80% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.2); }
+}
+
+@keyframes starPulse {
+  0%, 100% { transform: scale(1); opacity: 0; }
+  50% { transform: scale(2); opacity: 1; }
+}
+
+@keyframes rain {
+  0% { transform: translateY(0) translateX(-10px); }
+  100% { transform: translateY(calc(100vh + 20px)) translateX(0); }
+}
+
+@keyframes snowfall {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(calc(100vh + 10px)) rotate(360deg); }
+}
+
+@keyframes cloudDrift {
+  0% { transform: translateX(var(--cloud-init-position)); }
+  100% { transform: translateX(calc(100vw + 200px)); }
+}
+
+@keyframes lightning {
+  0%, 95%, 100% { 
+    opacity: 0;
+    background: transparent;
+  }
+  96%, 98% { 
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.2);
+  }
+  97% {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.6);
+  }
+}
+
+@keyframes lightningBolt {
+  0%, 90%, 100% { 
+    opacity: 0; 
+  }
+  92%, 92.1% { 
+    opacity: 1; 
+  }
+  92.2%, 95% {
+    opacity: 0;
+  }
+  95.1%, 95.2% {
+    opacity: 0.8;
+  }
+  95.3%, 99.9% {
+    opacity: 0;
+  }
+}
+
+@keyframes sunPulsate {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); }
+}
+
+@keyframes moonGlow {
+  0% { box-shadow: 0 0 20px 10px var(--moon-glow); }
+  100% { box-shadow: 0 0 30px 15px var(--moon-glow); }
+}
+
+@keyframes sunRays {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes flareShift {
+  0% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.2) rotate(10deg); }
+}
+
+@keyframes sunMovement {
+  0% { transform: translateX(-10vw); }
+  50% { transform: translateY(5vh) translateX(0); }
+  100% { transform: translateX(10vw); }
+}
+
+@keyframes moonMovement {
+  0% { transform: translateX(5vw); }
+  50% { transform: translateY(-3vh) translateX(0); }
+  100% { transform: translateX(-5vw); }
+}
+
+@keyframes mistDrift {
+  0% { transform: translateX(-100px); }
+  100% { transform: translateX(100px); }
+}
+
+/* Импорт компонентных стилей */
+@import 'components/weather-card';
+@import 'components/forecast';
+@import 'components/search';
+@import 'components/loader'; 

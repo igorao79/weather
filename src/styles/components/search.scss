@@ -1,0 +1,81 @@
+.search {
+  margin-bottom: 30px;
+  
+  &__form {
+    display: flex;
+    gap: 10px;
+  }
+  
+  &__input {
+    flex: 1;
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: 10px;
+    padding: 15px;
+    color: var(--text-color);
+    box-shadow: var(--shadow);
+    font-size: 1rem;
+    transition: box-shadow 0.3s ease;
+    
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--highlight-color);
+    }
+    
+    &::placeholder {
+      color: var(--light-text-color);
+    }
+  }
+  
+  &__button {
+    background-color: var(--highlight-color);
+    border: none;
+    border-radius: 10px;
+    padding: 15px 20px;
+    color: var(--text-color);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    
+    &:hover {
+      background-color: darken(#3c47e9, 10%);
+    }
+    
+    &:active {
+      transform: scale(0.98);
+    }
+    
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--text-color);
+    }
+  }
+  
+  &__location-btn {
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    
+    &:hover {
+      background-color: lighten(#1e213a, 5%);
+    }
+    
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--highlight-color);
+    }
+    
+    svg {
+      width: 22px;
+      height: 22px;
+      fill: var(--text-color);
+    }
+  }
+} 
