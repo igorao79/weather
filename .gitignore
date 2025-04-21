@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Optimization temporary files
+purgecss.temp.cjs
+*.backup
+*.stats.html
