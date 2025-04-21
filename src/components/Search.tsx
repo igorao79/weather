@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles/components/search.scss';
 
 interface SearchProps {
@@ -9,6 +9,24 @@ interface SearchProps {
 
 const Search = ({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
   const [city, setCity] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Определяем мобильное устройство
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 480);
+    };
+    
+    // Проверяем при загрузке
+    checkMobile();
+    
+    // Слушаем изменение размера окна
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -29,17 +47,24 @@ const Search = ({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
         <input
           type="text"
           className="search__input"
-          placeholder="Введите название города..."
+          placeholder={isMobile ? "Город..." : "Введите название города..."}
           value={city}
           onChange={(e) => setCity(e.target.value)}
           disabled={isLoading}
         />
         <button 
           type="submit" 
-          className="search__button"
+          className={`search__button ${isMobile ? 'search__button--icon' : ''}`}
           disabled={isLoading}
+          aria-label="Поиск"
         >
-          Поиск
+          {isMobile ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z" fill="currentColor"/>
+            </svg>
+          ) : (
+            "Поиск"
+          )}
         </button>
         <button
           type="button"

@@ -3,7 +3,37 @@ import { WeatherData, ForecastData, DailyForecast } from '../types';
 
 // Используйте свой ключ API. Рекомендуется хранить его в .env файле для безопасности
 const API_KEY = 'b1b15e88fa797225412429c1c50c122a1'; // Тестовый ключ из документации OpenWeatherMap
-const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+// Альтернативные API URL для использования с VPN
+const API_FALLBACK_URLS = [
+  'https://api.openweathermap.org/data/2.5', // Основной URL
+  'https://openweathermap.org/data/2.5', // Альтернативный URL
+  'https://pro.openweathermap.org/data/2.5' // Еще один альтернативный URL
+];
+
+// Функция для попыток запроса к разным URL при ошибке
+async function fetchWithFallback(path: string, params: any): Promise<any> {
+  let lastError;
+  for (const baseUrl of API_FALLBACK_URLS) {
+    try {
+      const response = await axios.get(`${baseUrl}/${path}`, { params });
+      return response.data;
+    } catch (error: any) {
+      console.log(`Ошибка запроса к ${baseUrl}: ${error.message}`);
+      lastError = error;
+      
+      // Если это не проблема сети, а ошибка API, не пытаемся другие URL
+      if (error.response && error.response.status !== 0) {
+        throw error;
+      }
+      
+      // Иначе пробуем следующий URL
+    }
+  }
+  
+  // Если все URL не сработали, выбрасываем последнюю ошибку
+  throw lastError;
+}
 
 // Только русские названия стран и территорий для проверки
 const INVALID_QUERIES = [
@@ -44,16 +74,15 @@ export const getWeatherByCity = async (city: string): Promise<WeatherData> => {
       }
     }
     
-    const response = await axios.get(`${BASE_URL}/weather`, {
-      params: {
-        q: city,
-        appid: API_KEY,
-        units: 'metric',
-        lang: 'ru'
-      }
+    // Используем fetchWithFallback вместо прямого запроса
+    const data = await fetchWithFallback('weather', {
+      q: city,
+      appid: API_KEY,
+      units: 'metric',
+      lang: 'ru'
     });
     
-    return response.data;
+    return data;
   } catch (error: any) {
     if (error.message === 'COUNTRY_OR_GENERAL_QUERY') {
       throw new Error('Пожалуйста, введите название конкретного города, а не страны или региона');
@@ -68,16 +97,16 @@ export const getWeatherByCity = async (city: string): Promise<WeatherData> => {
 // Функция для получения погоды по координатам
 export const getWeatherByCoords = async (lat: number, lon: number): Promise<WeatherData> => {
   try {
-    const response = await axios.get(`${BASE_URL}/weather`, {
-      params: {
-        lat,
-        lon,
-        appid: API_KEY,
-        units: 'metric',
-        lang: 'ru'
-      }
+    // Используем fetchWithFallback вместо прямого запроса
+    const data = await fetchWithFallback('weather', {
+      lat,
+      lon,
+      appid: API_KEY,
+      units: 'metric',
+      lang: 'ru'
     });
-    return response.data;
+    
+    return data;
   } catch (error) {
     console.error('Ошибка при получении погоды по координатам:', error);
     throw error;
@@ -87,15 +116,15 @@ export const getWeatherByCoords = async (lat: number, lon: number): Promise<Weat
 // Функция для получения прогноза на 5 дней
 export const getForecastByCity = async (city: string): Promise<ForecastData> => {
   try {
-    const response = await axios.get(`${BASE_URL}/forecast`, {
-      params: {
-        q: city,
-        appid: API_KEY,
-        units: 'metric',
-        lang: 'ru'
-      }
+    // Используем fetchWithFallback вместо прямого запроса
+    const data = await fetchWithFallback('forecast', {
+      q: city,
+      appid: API_KEY,
+      units: 'metric',
+      lang: 'ru'
     });
-    return response.data;
+    
+    return data;
   } catch (error) {
     console.error('Ошибка при получении прогноза по городу:', error);
     throw error;
@@ -105,16 +134,16 @@ export const getForecastByCity = async (city: string): Promise<ForecastData> => 
 // Функция для получения прогноза по координатам
 export const getForecastByCoords = async (lat: number, lon: number): Promise<ForecastData> => {
   try {
-    const response = await axios.get(`${BASE_URL}/forecast`, {
-      params: {
-        lat,
-        lon,
-        appid: API_KEY,
-        units: 'metric',
-        lang: 'ru'
-      }
+    // Используем fetchWithFallback вместо прямого запроса
+    const data = await fetchWithFallback('forecast', {
+      lat,
+      lon,
+      appid: API_KEY,
+      units: 'metric',
+      lang: 'ru'
     });
-    return response.data;
+    
+    return data;
   } catch (error) {
     console.error('Ошибка при получении прогноза по координатам:', error);
     throw error;

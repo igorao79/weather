@@ -63,6 +63,15 @@
       cursor: not-allowed;
       transform: none;
     }
+    
+    &--icon {
+      padding: 0;
+      width: 46px;
+      min-width: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
   
   &__location-btn {
@@ -103,28 +112,61 @@
   .search {
     &__form {
       gap: 8px;
+      flex-wrap: nowrap;
     }
     
     &__input {
-      padding: 12px;
+      height: 46px;
+      padding: 0 10px;
       font-size: 0.9rem;
+      min-width: 0; /* Позволяет инпуту сжиматься */
+      flex: 1;
     }
     
     &__button {
-      padding: 12px 15px;
-      font-size: 0.9rem;
+      height: 46px;
+      border-radius: 8px;
+      
+      &--icon {
+        width: 46px;
+        height: 46px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
     }
     
     &__location-btn {
-      min-width: 42px;
-      min-height: 42px;
-      width: 42px;
-      height: 42px;
+      min-width: 46px;
+      min-height: 46px;
+      width: 46px;
+      height: 46px;
       
       svg {
         width: 20px;
         height: 20px;
       }
+    }
+  }
+}
+
+/* Очень маленькие экраны */
+@media (max-width: 360px) {
+  .search {
+    &__input {
+      padding: 0 8px;
+    }
+    
+    &__form {
+      gap: 6px;
+    }
+    
+    &__button--icon,
+    &__location-btn {
+      min-width: 40px;
+      width: 40px;
+      height: 40px;
     }
   }
 } 
