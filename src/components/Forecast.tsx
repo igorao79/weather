@@ -1,6 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ForecastData, DailyForecast } from '../types';
 import '../styles/components/forecast.scss';
+
+// Кэшированные URL для иконок - вынесено за пределы компонента
+const iconCache = new Map<string, string>();
+const getIconUrl = (iconCode: string, large: boolean = false) => {
+  const size = large ? '@2x' : '';
+  const key = `${iconCode}${size}`;
+  
+  if (!iconCache.has(key)) {
+    iconCache.set(key, `https://openweathermap.org/img/wn/${iconCode}${size}.png`);
+  }
+  
+  return iconCache.get(key) as string;
+};
 
 interface ForecastProps {
   // Компонент может получать либо объект ForecastData, либо массив преобразованных прогнозов
@@ -17,41 +30,81 @@ interface HourlyWeatherData {
 }
 
 const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
-  // Состояние для отслеживания наведения на карточку
+  // Оптимизировано: использование useRef для состояний, которые не влияют на рендеринг
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
-  // Состояние для определения типа устройства
-  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const isMobile = useRef<boolean>(window.innerWidth < 768);
+  const isTablet = useRef<boolean>(window.innerWidth >= 768 && window.innerWidth < 1024);
+  const isLandscape = useRef<boolean>(window.innerWidth > window.innerHeight);
   
-  // Проверка мобильного устройства
+  // Скрываем вычисления и кэшируем результаты
+  const processedForecasts = useMemo(() => {
+    return dailyForecasts || getDailyForecasts();
+  }, [dailyForecasts, data]);
+  
+  // Проверка устройства только при изменении размера окна для экономии ресурсов
   useEffect(() => {
-    const checkIfMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    const checkDeviceType = () => {
+      isMobile.current = window.innerWidth < 768;
+      isTablet.current = window.innerWidth >= 768 && window.innerWidth < 1024;
+      isLandscape.current = window.innerWidth > window.innerHeight;
     };
     
     // Проверяем при загрузке
-    checkIfMobile();
+    checkDeviceType();
     
-    // Добавляем слушатель для изменения размера
-    window.addEventListener('resize', checkIfMobile);
+    // Используем debounced обработчик, чтобы не вызывать функцию слишком часто
+    let resizeTimer: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(checkDeviceType, 150);
+    };
+    
+    // Обрабатываем изменение ориентации для планшетов
+    const handleOrientationChange = () => {
+      checkDeviceType();
+      
+      // Если был открытый элемент, закрываем его при смене ориентации
+      if (hoveredDay && isTablet.current) {
+        setIsAnimating(true);
+        setHoveredDay(null);
+        
+        // Убираем анимацию после закрытия
+        setTimeout(() => {
+          setIsAnimating(false);
+        }, 300);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleOrientationChange);
     
     return () => {
-      window.removeEventListener('resize', checkIfMobile);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+      clearTimeout(resizeTimer);
     };
-  }, []);
+  }, [hoveredDay]);
   
-  // Используем переданные dailyForecasts, если они есть, иначе обрабатываем data
-  const processedForecasts = dailyForecasts || getDailyForecasts();
-  
-  // Получаем почасовые данные для конкретного дня
-  const getHourlyData = (date: Date): HourlyWeatherData[] => {
+  // Мемоизированная функция получения почасовых данных
+  const getHourlyData = useCallback((date: Date): HourlyWeatherData[] => {
     if (!data || !data.list) return [];
     
     const targetDate = new Date(date).toISOString().split('T')[0];
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    // Определяем, является ли выбранный день сегодняшним
+    const isToday = new Date().toISOString().split('T')[0] === targetDate;
     
     // Фильтруем данные для выбранного дня
     return data.list.filter(item => {
-      const itemDate = new Date(item.dt * 1000).toISOString().split('T')[0];
-      return itemDate === targetDate;
+      const itemDate = new Date(item.dt * 1000);
+      const itemDateStr = itemDate.toISOString().split('T')[0];
+      if (isToday) {
+        return itemDateStr === targetDate && itemDate.getHours() >= currentHour;
+      }
+      return itemDateStr === targetDate;
     }).map(item => {
       const itemDate = new Date(item.dt * 1000);
       return {
@@ -61,16 +114,13 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
         description: item.weather[0].description
       };
     });
-  };
+  }, [data]);
   
-  // Группировка прогноза по дням
+  // Оптимизированный getDailyForecasts для предотвращения лишних вычислений
   function getDailyForecasts() {
-    const dailyData: Record<string, any> = {};
+    if (!data || !data.list || !Array.isArray(data.list)) return [];
     
-    // Проверяем, что данные существуют перед их обработкой
-    if (!data || !data.list || !Array.isArray(data.list)) {
-      return [];
-    }
+    const dailyData: Record<string, any> = {};
     
     data.list.forEach(item => {
       const date = new Date(item.dt * 1000);
@@ -87,19 +137,16 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
       
       dailyData[day].temps.push(item.main.temp);
       
-      // Считаем частоту погодных условий
       const icon = item.weather[0].icon;
       const condition = item.weather[0].description;
       dailyData[day].icons[icon] = (dailyData[day].icons[icon] || 0) + 1;
       dailyData[day].conditions.push(condition);
     });
     
-    // Преобразуем в массив и берем только первые 5 дней
     return Object.keys(dailyData).slice(0, 5).map(day => {
       const data = dailyData[day];
       const dayName = new Date(day).toLocaleDateString('ru-RU', { weekday: 'short' });
       
-      // Находим наиболее частую иконку
       let maxCount = 0;
       let mostFrequentIcon = '';
       let mostFrequentCondition = '';
@@ -111,7 +158,6 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
         }
       }
       
-      // Находим наиболее частое описание погоды
       const conditionCounts: Record<string, number> = {};
       data.conditions.forEach((condition: string) => {
         conditionCounts[condition] = (conditionCounts[condition] || 0) + 1;
@@ -125,22 +171,18 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
         }
       }
       
-      // Расчет макс и мин температуры
-      const temp_max = Math.max(...data.temps);
-      const temp_min = Math.min(...data.temps);
-      
       return {
         day: dayName,
         date: data.date,
-        temp_max,
-        temp_min,
+        temp_max: Math.max(...data.temps),
+        temp_min: Math.min(...data.temps),
         icon: mostFrequentIcon,
         description: mostFrequentCondition
       };
     });
-  };
+  }
 
-  // Если нет данных, показываем соответствующее сообщение
+  // Раннее возвращение при отсутствии данных
   if (!processedForecasts || processedForecasts.length === 0) {
     return (
       <div className="forecast">
@@ -152,61 +194,262 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
     );
   }
 
-  // Функция для получения уникального ID дня для отслеживания наведения
-  const getDayId = (date: Date) => {
-    return date.toISOString().split('T')[0];
+  // Функция для получения ID дня
+  const getDayId = (date: Date) => date.toISOString().split('T')[0];
+  
+  // Адаптивная функция для определения позиции элемента в сетке
+  const getPositionClass = useCallback((index: number) => {
+    // На мобильных нет дополнительных классов
+    if (isMobile.current) {
+      return '';
+    }
+    
+    // Для планшетов в портретной ориентации
+    if (isTablet.current && !isLandscape.current) {
+      // Сетка 3 колонки
+      if (index % 3 === 0) return 'forecast__item--left';
+      if (index % 3 === 1) return 'forecast__item--center';
+      if (index % 3 === 2) return 'forecast__item--right';
+    }
+    
+    // Для планшетов в альбомной ориентации и десктопов
+    if ((isTablet.current && isLandscape.current) || !isTablet.current) {
+      // Сетка 5 колонок
+      if (index % 5 === 0) return 'forecast__item--far-left';
+      if (index % 5 === 1) return 'forecast__item--left';
+      if (index % 5 === 2) return 'forecast__item--center';
+      if (index % 5 === 3) return 'forecast__item--right';
+      if (index % 5 === 4) return 'forecast__item--far-right';
+    }
+    
+    return '';
+  }, [isMobile, isTablet, isLandscape]);
+  
+  // Обработчики событий с throttle для предотвращения частых обновлений состояния
+  const handleMouseEnter = (dayId: string) => {
+    if (isMobile.current || isTablet.current) return;
+    
+    setIsAnimating(true);
+    setHoveredDay(dayId);
   };
   
-  // Обработчики событий для мобильных устройств
-  const handleItemClick = (dayId: string) => {
-    if (isMobile) {
-      // Если уже выбран этот день, сбрасываем, иначе выбираем
-      setHoveredDay(hoveredDay === dayId ? null : dayId);
+  const handleMouseLeave = () => {
+    if (isMobile.current || isTablet.current) return;
+    
+    setIsAnimating(true);
+    setHoveredDay(null);
+    
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, 300); // Уменьшено с 500 до 300 для ускорения
+  };
+  
+  // Упрощенный обработчик для улучшения производительности
+  const handleItemClick = (dayId: string, event: React.MouseEvent) => {
+    if (isMobile.current || isTablet.current) {
+      event.stopPropagation();
+      event.preventDefault();
+      
+      // Ставим задержку для анимации и перестроения DOM
+      if (hoveredDay !== dayId) {
+        // Если открываем новый элемент, сначала закрываем текущий
+        if (hoveredDay) {
+          // Включаем анимацию
+          setIsAnimating(true);
+          // Закрываем текущий элемент
+          setHoveredDay(null);
+          
+          // Открываем новый элемент с небольшой задержкой
+          setTimeout(() => {
+            setHoveredDay(dayId);
+            
+            // Убираем анимацию после завершения перехода
+            setTimeout(() => {
+              setIsAnimating(false);
+            }, 300);
+          }, 150);
+        } else {
+          // Если нет открытого элемента, просто открываем новый
+          setIsAnimating(true);
+          setHoveredDay(dayId);
+          
+          // Убираем анимацию после завершения перехода
+          setTimeout(() => {
+            setIsAnimating(false);
+          }, 300);
+        }
+      } else {
+        // Закрываем текущий элемент
+        setIsAnimating(true);
+        setHoveredDay(null);
+        
+        // Убираем анимацию после завершения перехода
+        setTimeout(() => {
+          setIsAnimating(false);
+        }, 300);
+      }
+      
+      // Перед тем, как изменить состояние, проверяем соседние элементы
+      const currentItem = event.currentTarget as HTMLElement;
+      const allItems = document.querySelectorAll('.forecast__item');
+      
+      // Закрываем все элементы, кроме текущего
+      allItems.forEach(item => {
+        const itemDayId = item.getAttribute('data-day-id');
+        if (itemDayId !== dayId && item !== currentItem) {
+          // Принудительно закрываем все другие элементы
+          item.classList.remove('forecast__item--expanded');
+        }
+      });
     }
   };
+  
+  // Обработчик для закрытия карточек при клике вне элементов
+  useEffect(() => {
+    if ((isMobile.current || isTablet.current) && hoveredDay) {
+      const handleClickOutside = (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        const forecastItem = target.closest('.forecast__item');
+        
+        // Если клик был вне элемента прогноза или на другом элементе
+        if (!forecastItem || forecastItem.getAttribute('data-day-id') !== hoveredDay) {
+          setIsAnimating(true);
+          setHoveredDay(null);
+          
+          // Убираем анимацию после завершения перехода
+          setTimeout(() => {
+            setIsAnimating(false);
+          }, 300);
+        }
+      };
+      
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [hoveredDay]);
+
+  // Предзагрузка только самых важных иконок
+  useEffect(() => {
+    let isMounted = true;
+    let loadedIcons = new Set<string>(); // Кэш для уже загруженных иконок
+    
+    // Функция с low priority предзагрузкой
+    const preloadIcons = () => {
+      if (processedForecasts.length && isMounted) {
+        // Загружаем иконки всех прогнозов при инициализации
+        processedForecasts.forEach((forecast, index) => {
+          const iconKey = forecast.icon + (index < 2 ? '@2x' : '');
+          
+          // Проверяем, не загружалась ли иконка ранее
+          if (!loadedIcons.has(iconKey)) {
+            const img = new Image();
+            img.src = getIconUrl(forecast.icon, index < 2);
+            loadedIcons.add(iconKey);
+          }
+        });
+      }
+    };
+    
+    // Отложенная предзагрузка для уменьшения нагрузки при загрузке страницы
+    const timer = setTimeout(preloadIcons, 300);
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [processedForecasts]); // Убираем hoveredDay из зависимостей
+
+  // Мемоизируем генерацию URL иконок для предотвращения лишних запросов
+  const iconUrlMemo = useMemo(() => {
+    const cache: Record<string, string> = {};
+    return (icon: string, large: boolean) => {
+      const key = `${icon}-${large ? 'large' : 'small'}`;
+      if (!cache[key]) {
+        cache[key] = getIconUrl(icon, large);
+      }
+      return cache[key];
+    };
+  }, []);
 
   return (
-    <div className="forecast">
+    <div className={`forecast ${isAnimating ? 'forecast--animating' : ''}`}>
       <h2 className="forecast__title">5-дневный прогноз</h2>
       <div className="forecast__list">
         {processedForecasts.map((forecast, index) => {
           const dayId = getDayId(forecast.date);
           const isHovered = hoveredDay === dayId;
-          let hourlyData: HourlyWeatherData[] = [];
+          const positionClass = getPositionClass(index);
           
-          // Если используется dailyForecasts, но нет оригинальных данных прогноза
-          if (dailyForecasts && !data && isHovered) {
-            // Генерируем фейковые данные по часам на основе температуры дня
-            hourlyData = Array.from({ length: 8 }).map((_, idx) => {
-              const hour = 3 + idx * 3; // генерируем часы от 3 до 24 с интервалом в 3 часа
-              // колебание температуры в течение дня
-              const tempVariation = Math.sin(hour / 24 * Math.PI) * 3;
-              const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
-              return {
-                hour,
-                temp: Math.round(midTemp + tempVariation),
-                icon: forecast.icon,
-                description: forecast.description
-              };
-            });
-          } else if (isHovered && data) {
-            hourlyData = getHourlyData(forecast.date);
-          }
+          // Мемоизируем почасовые данные только когда они нужны
+          const hourlyData = useMemo(() => {
+            if (!isHovered) return [];
+            
+            if (dailyForecasts && !data) {
+              const today = new Date().toISOString().split('T')[0];
+              const forecastDay = forecast.date.toISOString().split('T')[0];
+              const isToday = today === forecastDay;
+              const currentHour = new Date().getHours();
+              
+              // Генерируем сокращенный набор данных для мобильных устройств
+              if (isToday) {
+                const hoursRemaining = Math.min(24 - currentHour, isMobile.current ? 12 : 24);
+                return Array.from({ length: hoursRemaining }).map((_, idx) => {
+                  const hour = currentHour + idx;
+                  const tempVariation = Math.sin(hour / 24 * Math.PI) * 3;
+                  const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  return {
+                    hour,
+                    temp: Math.round(midTemp + tempVariation),
+                    icon: forecast.icon,
+                    description: forecast.description
+                  };
+                });
+              } else {
+                // Для других дней - сокращаем количество часов для мобильных
+                const hoursPerDay = isMobile.current ? 12 : 24;
+                const step = 24 / hoursPerDay;
+                return Array.from({ length: hoursPerDay }).map((_, idx) => {
+                  const hour = Math.floor(idx * step);
+                  const tempVariation = Math.sin(hour / 24 * Math.PI) * 3;
+                  const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  return {
+                    hour,
+                    temp: Math.round(midTemp + tempVariation),
+                    icon: forecast.icon,
+                    description: forecast.description
+                  };
+                });
+              }
+            } else if (data) {
+              const hourlyItems = getHourlyData(forecast.date);
+              // Ограничиваем количество элементов для мобильных устройств
+              return isMobile.current ? hourlyItems.slice(0, 12) : hourlyItems;
+            }
+            
+            return [];
+          }, [isHovered, forecast, data, dailyForecasts, getHourlyData]);
           
           return (
             <div 
               key={index} 
-              className={`forecast__item ${isHovered ? 'forecast__item--expanded' : ''}`}
-              onMouseEnter={() => !isMobile && setHoveredDay(dayId)}
-              onMouseLeave={() => !isMobile && setHoveredDay(null)}
-              onClick={() => handleItemClick(dayId)}
+              className={`forecast__item ${isHovered ? 'forecast__item--expanded' : ''} ${positionClass}`}
+              onMouseEnter={isMobile.current || isTablet.current ? undefined : () => handleMouseEnter(dayId)}
+              onMouseLeave={isMobile.current || isTablet.current ? undefined : handleMouseLeave}
+              onClick={(e) => handleItemClick(dayId, e)}
+              data-day-id={dayId}
+              data-position={index}
+              tabIndex={0}
             >
               <div className="forecast__item-content">
                 <div className="forecast__day">{forecast.day}</div>
                 <div className="forecast__icon">
                   <img 
-                    src={`https://openweathermap.org/img/wn/${forecast.icon}@2x.png`} 
-                    alt={forecast.description} 
+                    src={iconUrlMemo(forecast.icon, true)} 
+                    alt={forecast.description}
+                    loading={index < 3 ? "eager" : "lazy"}
+                    width="50"
+                    height="50"
+                    fetchPriority={index < 2 ? "high" : "auto"}
                   />
                 </div>
                 <div className="forecast__description">
@@ -234,9 +477,12 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
                           <div key={idx} className="forecast__hourly-item">
                             <span className="forecast__hourly-hour">{hour.hour}:00</span>
                             <img 
-                              src={`https://openweathermap.org/img/wn/${hour.icon}.png`} 
+                              src={iconUrlMemo(hour.icon, false)} 
                               alt={hour.description} 
                               className="forecast__hourly-icon"
+                              loading="lazy"
+                              width="30"
+                              height="30" 
                             />
                             <span className="forecast__hourly-temp">{hour.temp}°</span>
                           </div>

@@ -1,7 +1,10 @@
 .weather-card {
+  display: flex;
+  flex-direction: column;
+
   background-color: var(--primary-color);
   border-radius: 16px;
-  padding: 10px;
+  padding: 5px 10px;
   box-shadow: var(--shadow);
   margin-bottom: 10px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -112,11 +115,13 @@
     font-size: 1.5rem;
     font-weight: 600;
     margin-bottom: 5px;
+    font-family: var(--main-font);
   }
   
   &__date {
     color: var(--light-text-color);
-    font-size: 0.9rem;
+    font-size: 1rem;
+    font-family: var(--secondary-font);
   }
   
   &__time {
@@ -129,6 +134,7 @@
     padding: 0 10px;
     border-radius: 8px;
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    font-family: var(--main-font);
   }
   
   &__content {
@@ -137,29 +143,41 @@
     align-items: center;
     text-align: center;
   }
+
+  &__center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0 !important;
+  }
+
   
   &__temp {
-    font-size: 4rem;
+    font-size: 3rem;
     font-weight: 700;
     margin: 10px 0;
+    transform: translateX(15px);
+    font-family: var(--main-font);
     
     &-unit {
       font-size: 2rem;
       vertical-align: top;
       font-weight: 400;
+      font-family: var(--secondary-font);
     }
   }
   
   &__description {
-    font-size: 1.2rem;
+    font-size: 1rem;
     margin-bottom: 10px;
     text-transform: capitalize;
+    font-family: var(--main-font);
   }
   
   &__icon {
-    width: 100px;
-    height: 100px;
-    margin: 10px 0;
+    width: 90px;
+    height: 90px;
     filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
     
     img {
@@ -169,30 +187,233 @@
     }
   }
   
+  // Стиль для строки деталей
+  &__details-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin: 10px 0;
+    padding: 8px 5px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    flex-wrap: wrap;
+  }
+  
+  &__detail-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+  }
+  
+  &__detail-separator {
+    height: 15px;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 0 8px;
+    
+    @media (max-width: 375px) {
+      display: none;
+    }
+  }
+  
+  &__detail-label {
+    color: var(--light-text-color);
+    font-size: 0.8rem;
+    margin-right: 4px;
+    font-family: var(--secondary-font);
+  }
+  
+  &__detail-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: var(--main-font);
+  }
+  
   &__details {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-    margin-top: 20px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 10px;
     width: 100%;
-    padding-top: 20px;
+    padding-top: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+    
+    @media (max-width: 767px) {
+      padding: 0 5px;
+    }
   }
   
   &__detail {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     
     &-label {
       color: var(--light-text-color);
       font-size: 0.8rem;
       margin-bottom: 5px;
+      font-family: var(--secondary-font);
     }
     
     &-value {
       font-size: 1.1rem;
       font-weight: 600;
+      font-family: var(--main-font);
+    }
+  }
+  
+  // Стили для почасового прогноза
+  &__hourly {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+    
+    @media (max-width: 767px) {
+      margin: 10px 0;
+      padding: 5px 0;
+    }
+  }
+  
+  &__hours {
+    display: flex;
+    width: 100%;
+    margin-top: 8px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--highlight-color) transparent;
+    gap: 10px;
+    justify-content: flex-start;
+    
+    @media (max-width: 767px) {
+      flex-wrap: nowrap;
+      overflow-x: scroll;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory;
+      scroll-padding: 8px;
+      white-space: nowrap;
+      padding: 5px 0 10px 0;
+      margin: 0 -5px;
+      width: calc(100% + 10px);
+      
+      &::before, &::after {
+        content: "";
+        display: block;
+        width: 5px;
+        flex: 0 0 auto;
+      }
+    }
+    
+    &::-webkit-scrollbar {
+      height: 3px;
+      
+      @media (max-width: 767px) {
+        height: 2px;
+      }
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background-color: var(--highlight-color);
+      border-radius: 4px;
+    }
+  }
+  
+  &__hour {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+    padding: 6px 8px;
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    flex: 0 0 auto;
+    
+    @media (max-width: 767px) {
+      scroll-snap-align: start;
+      min-width: 65px;
+      flex: 0 0 auto;
+      background-color: rgba(255, 255, 255, 0.05);
+      padding: 8px 6px;
+      margin: 0;
+    }
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+      
+      @media (min-width: 768px) {
+        transform: translateY(-2px);
+      }
+    }
+    
+    &-time {
+      font-size: 0.75rem;
+      color: var(--light-text-color);
+      margin-bottom: 3px;
+    }
+    
+    &-icon {
+      width: 30px;
+      height: 30px;
+      margin-bottom: 3px;
+      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+    }
+    
+    &-temp {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-color);
+    }
+  }
+  
+  // Адаптивность
+  @media (max-width: 480px) {
+    &__details {
+      grid-template-columns: 1fr;
+    }
+    
+    &__hourly {
+      grid-column: span 1;
+    }
+    
+    &__hours {
+      justify-content: flex-start;
+      gap: 5px;
+    }
+    
+    &__details-row {
+      font-size: 0.9rem;
+      flex-wrap: wrap;
+      justify-content: space-around;
+      gap: 5px;
+      padding: 5px;
+    }
+    
+    &__detail-item {
+      padding: 3px;
+    }
+    
+    &__detail-separator {
+      margin: 0 5px;
+    }
+  }
+  
+  @media (max-width: 375px) {
+    &__detail-item {
+      width: 100%;
+      justify-content: space-between;
+      margin-bottom: 3px;
+    }
+    
+    &__details-row {
+      flex-direction: column;
+      align-items: flex-start;
     }
   }
 } 

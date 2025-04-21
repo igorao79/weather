@@ -1,15 +1,27 @@
 .forecast {
-    padding: 5px;
+    padding: 10px;
     border-radius: 16px;
     background-color: rgba(30, 33, 58, 0.7);
     backdrop-filter: blur(10px);
     box-shadow: var(--shadow);
-    transition: transform 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
     overflow: visible;
     position: relative;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+
+    background-color: var(--primary-color);
+    border-radius: 15px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
     
-    &:hover {
-      transform: translateY(-5px);
+    &--animating {
+      .forecast__hourly-container {
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+      }
     }
     
     &__title {
@@ -34,34 +46,74 @@
     &__list {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 10px;
+      gap: 15px;
       animation: fadeIn 0.6s ease-out;
+      position: relative;
       
-      @media (min-width: 768px) {
+      // Планшеты и десктопы
+      @media (min-width: 1024px) {
         grid-template-columns: repeat(5, 1fr);
+        grid-auto-rows: min-content; // Важно для предотвращения растягивания
+      }
+      
+      // Планшеты - до 1024px
+      @media (min-width: 768px) and (max-width: 1025px) {
+        grid-template-columns: repeat(3, 1fr);
+        grid-auto-rows: min-content; // Важно для предотвращения растягивания
+        padding-bottom: 30px; // Добавляем отступ внизу
+        position: relative;
+        isolation: isolate; // Создаем новый контекст наложения
+        contain: layout size style; // Улучшаем производительность
+        
+        // Добавляем стили для каждого элемента на планшетах
+        .forecast__item {
+          isolation: isolate;
+          position: relative;
+          transition: transform 0.3s ease, box-shadow 0.3s ease;
+          z-index: 1;
+          contain: layout style; // Улучшаем производительность
+          height: auto; // Фиксированная высота
+          
+          &--expanded {
+            z-index: 50 !important; // Гарантированно поверх других элементов
+            transition: transform 0.3s ease, box-shadow 0.3s ease, z-index 0s;
+            contain: none; // Отключаем ограничение содержимого
+          }
+        }
+      }
+      
+      // Мобильные телефоны
+      @media (max-width: 767px) {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
       }
     }
     
     &__item {
       background-color: var(--primary-color);
       border-radius: 16px;
-      padding: 6px 10px;
+      padding: 10px 15px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       align-items: center;
-      transition: all 0.3s ease-in-out;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
       background: rgba(30, 33, 58, 0.8);
       backdrop-filter: blur(5px);
       border: 1px solid rgba(255, 255, 255, 0.05);
       position: relative;
       z-index: 1;
       min-height: 170px;
+      height: 100%;
+      contain: layout; // Улучшаем производительность
       
-      &:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        border-color: rgba(255, 255, 255, 0.1);
+      @media (max-width: 1100px) {
+        &:hover:not(&--expanded) {
+          transform: none;
+          box-shadow: var(--shadow);
+          border-color: rgba(255, 255, 255, 0.05);
+        }
       }
       
       &-content {
@@ -70,21 +122,138 @@
         align-items: center;
         width: 100%;
         z-index: 2;
+        flex: 1; // Заполняем доступное пространство
       }
       
-      // Стили для расширенного состояния при наведении - НОВЫЙ ПОДХОД
-      &--expanded {
-        z-index: 10;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      // Фиксация для мобильных устройств
+      @media (max-width: 767px) {
+        isolation: isolate; // Изолируем для z-index контекста
+        contain: layout style; // Улучшаем производительность
         
-        // На мобильных устройствах - не меняем размеры карточки, а добавляем popup снизу
-        @media (max-width: 767px) {
-          transform: translateY(-3px);
+        // Убираем эффекты наведения для мобильных, используем только при клике
+        &:hover:not(&--expanded) {
+          transform: none;
+          box-shadow: var(--shadow);
+          border-color: rgba(255, 255, 255, 0.05);
+        }
+      }
+      
+      // Стили для расширенного состояния при наведении
+      &--expanded {
+        z-index: 20; // Увеличиваем z-index
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        
+        .forecast__hourly-container {
+          opacity: 1;
+          pointer-events: all;
+          visibility: visible;
         }
         
-        // На десктопе - не меняем размеры карточки
-        @media (min-width: 768px) {
+        // НА ТЕЛЕФОНАХ - раскрытие вниз и изоляция
+        @media (max-width: 767px) {
           transform: translateY(-3px);
+          margin-bottom: 220px; // Фиксированный отступ снизу
+          position: relative; // Важно для правильного позиционирования
+          
+          ~ .forecast__item {
+            transform: none !important;
+            margin-top: 10px !important;
+          }
+          
+          .forecast__hourly-container {
+            transform: translateY(0);
+            top: 105%; // Позиционируем сразу после карточки
+            opacity: 1;
+            height: 200px; // Фиксированная высота
+          }
+        }
+        
+        // НА ПЛАНШЕТАХ - универсальное раскрытие вниз для всех ориентаций
+        @media (min-width: 768px) and (max-width: 1023px) {
+          transform: translateY(-3px) scale(1.03);
+          margin-bottom: 250px; // Отступ для всплывающего блока
+          grid-row-end: span 2; // Занимаем две строки
+          position: relative; // Важно для изоляции
+          height: auto; // Автоматическая высота
+          
+          // Определяем позицию для крайних элементов (право/лево)
+          &:nth-child(3n) { // Крайний правый в ряду из 3
+            .forecast__hourly-container {
+              right: 0;
+              left: auto;
+              transform-origin: top right;
+            }
+          }
+          
+          &:nth-child(3n-1) { // Центральный в ряду из 3
+            .forecast__hourly-container {
+              left: 50%;
+              transform: translateX(-50%);
+              transform-origin: top center;
+            }
+          }
+          
+          // Важный стиль - соседние элементы не должны влиять друг на друга
+          & ~ .forecast__item {
+            z-index: 1;
+            transform: none !important;
+            scale: none !important;
+          }
+          
+          .forecast__hourly-container {
+            transform: translateY(0);
+            bottom: auto;
+            top: 105%; // Позиционируем сразу после карточки
+            left: 0; // По умолчанию слева
+            width: 100%;
+            height: 230px; // Фиксированная высота
+            max-width: 350px; // Максимальная ширина для больших экранов
+          }
+        }
+        
+        // В альбомной ориентации адаптируем сетку и расположение
+        @media (min-width: 768px) and (max-width: 1023px) and (orientation: landscape) {
+          .forecast__list {
+            grid-template-columns: repeat(5, 1fr) !important; // В альбомной ориентации можно уместить 5 колонок
+            
+            .forecast__item {
+              &--expanded {
+                .forecast__hourly-container {
+                  left: 0; // Всегда начинаем слева
+                  right: auto;
+                  max-width: 100%; // В альбомной ориентации контейнер может быть шире
+                  
+                  // Для первых двух элементов располагаем слева
+                  &:nth-child(-n+2) {
+                    left: 0;
+                    right: auto;
+                  }
+                  
+                  // Для последних двух элементов располагаем справа
+                  &:nth-last-child(-n+2) {
+                    left: auto;
+                    right: 0;
+                  }
+                  
+                  // Для центрального элемента располагаем по центру
+                  &:nth-child(3) {
+                    left: 50%;
+                    transform: translateX(-50%);
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // НА ДЕСКТОПАХ - раскрытие вправо
+        @media (min-width: 1024px) {
+          transform: translateY(-5px) scale(1.05);
+          
+          .forecast__hourly-container {
+            transform: translateX(0);
+            height: 100%; // Высота 100% на десктопах
+          }
         }
       }
     }
@@ -126,9 +295,10 @@
       align-items: center;
       justify-content: space-between;
       width: 100%;
-      margin-top: 8px;
+
       padding-top: 8px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
+
     }
     
     &__temp {
@@ -156,36 +326,55 @@
       }
     }
     
-    // Почасовой прогноз - НОВЫЙ ПОДХОД
+    // Стили для контейнера с почасовыми данными
     &__hourly-container {
-      position: fixed; // Вместо absolute используем fixed
+      position: absolute;
       background: rgba(30, 33, 58, 0.95);
       backdrop-filter: blur(10px);
       border-radius: 16px;
       box-shadow: var(--shadow);
-      z-index: 100; // Поверх всего
-      animation: fadeIn 0.3s ease-out;
+      z-index: 30; // Еще выше z-index
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s;
       border: 1px solid rgba(255, 255, 255, 0.1);
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
       
-      // На мобильных устройствах - отдельное всплывающее окно
-      @media (max-width: 767px) {
-        left: 50%;
-        bottom: 10px;
-        transform: translateX(-50%);
-        width: 90%;
-        max-height: 180px;
-        padding: 10px;
+      // МОБИЛЬНЫЕ И ПЛАНШЕТЫ - блок снизу
+      @media (max-width: 1023px) {
+        top: 100%;
+        left: 0;
+        width: 100%;
+        transform: translateY(15px);
+        padding: 15px;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        max-height: 230px;
+        height: 230px; // Фиксированная высота
+        contain: content; // Улучшаем производительность
+        
+        // При горизонтальной ориентации на планшетах корректируем размеры
+        @media (orientation: landscape) and (min-width: 768px) {
+          max-width: 350px; // Ограничиваем ширину
+        }
       }
       
-      // На десктопе - показываем справа от карточки
-      @media (min-width: 768px) {
+      // ТОЛЬКО ДЕСКТОПЫ - блок справа
+      @media (min-width: 1024px) {
         top: 0;
         left: 100%;
-        width: 120px;
+        width: 220px;
+        transform: translateX(15px);
+        padding: 15px;
         height: 100%;
-        border-radius: 0 16px 16px 0;
-        border-left: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 10px;
+        contain: content; // Улучшаем производительность
+        
+        // Для последнего элемента в ряду - контейнер слева
+        .forecast__item:last-child &,
+        .forecast__item:nth-child(5n) & {
+          left: auto;
+          right: 100%;
+          transform: translateX(-15px);
+        }
       }
     }
     
@@ -195,15 +384,15 @@
       flex-direction: column;
       
       &-title {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         color: var(--text-color);
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         text-align: center;
         position: relative;
         
         @media (max-width: 767px) {
-          font-size: 0.75rem;
-          margin-bottom: 6px;
+          font-size: 0.8rem;
+          margin-bottom: 8px;
         }
         
         &::after {
@@ -220,22 +409,21 @@
       }
       
       &-list {
-        // На мобильных устройствах - горизонтальный скролл
-        @media (max-width: 767px) {
-          display: flex;
-          overflow-x: auto;
-          padding-bottom: 6px;
-          -webkit-overflow-scrolling: touch;
-          gap: 8px;
+        overflow-y: auto;
+        max-height: 180px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-right: 5px;
+        
+        // Максимальная высота для мобильных и планшетов
+        @media (max-width: 1023px) {
+          max-height: 160px;
         }
         
-        // На десктопе - вертикальный скролл
-        @media (min-width: 768px) {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          max-height: calc(100% - 30px);
-          overflow-y: auto;
+        // Максимальная высота для десктопов
+        @media (min-width: 1024px) {
+          max-height: 200px;
         }
         
         scrollbar-width: thin;
@@ -252,64 +440,39 @@
         
         &::-webkit-scrollbar-thumb {
           background-color: var(--highlight-color);
-          border-radius: 10px;
+          border-radius: 4px;
         }
       }
       
       &-item {
         display: flex;
         align-items: center;
-        transition: transform 0.2s ease;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.05);
         border-radius: 10px;
-        background-color: rgba(255, 255, 255, 0.05);
+        padding: 8px 10px;
+        transition: all 0.2s ease;
+        width: 100%;
         
-        // На мобильных устройствах - компактные элементы колонкой
         @media (max-width: 767px) {
-          flex-direction: column;
-          min-width: 55px;
-          padding: 5px;
-        }
-        
-        // На десктопе - элементы в строку
-        @media (min-width: 768px) {
-          width: 100%;
-          justify-content: space-between;
-          padding: 5px 8px;
+          margin-bottom: 5px; // Добавляем отступ между элементами на мобильных
         }
         
         &:hover {
+          background: rgba(255, 255, 255, 0.1);
           transform: translateY(-2px);
-          background-color: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.1);
         }
       }
       
       &-hour {
         font-size: 0.75rem;
         color: var(--light-text-color);
-        
-        @media (max-width: 767px) {
-          margin-bottom: 3px;
-        }
-        
-        @media (min-width: 768px) {
-          margin-right: 5px;
-        }
+        min-width: 45px;
       }
       
       &-icon {
-        width: 25px;
-        height: 25px;
-        filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.2));
-        
-        @media (max-width: 767px) {
-          margin-bottom: 3px;
-        }
-        
-        @media (min-width: 768px) {
-          margin: 0 3px;
-        }
+        width: 30px;
+        height: 30px;
+        margin: 0 8px;
       }
       
       &-temp {
@@ -319,43 +482,39 @@
       }
       
       &-empty {
-        width: 100%;
         text-align: center;
         color: var(--light-text-color);
-        font-style: italic;
-        font-size: 0.8rem;
-        padding: 10px 5px;
-      }
-      
-      // Кнопка закрытия для мобильных устройств
-      &-close {
-        position: absolute;
-        top: 5px;
-        right: 5px;
-        width: 20px;
-        height: 20px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        color: var(--light-text-color);
-        font-size: 16px;
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.3);
-        
-        @media (min-width: 768px) {
-          display: none;
-        }
+        font-size: 0.75rem;
+        padding: 10px;
       }
     }
+}
+
+// Анимация появления контента
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Устраняем дергания анимации
+@media (prefers-reduced-motion: no-preference) {
+  .forecast__list {
+    contain: layout style; // Предотвращает изменение размеров
   }
   
-  @keyframes fadeIn {
-    0% {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    100% {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .forecast__item {
+    backface-visibility: hidden; // Улучшает производительность
+    will-change: transform, box-shadow; // Оптимизирует анимацию
   }
+  
+  .forecast__hourly-container {
+    backface-visibility: hidden; // Улучшает производительность
+    will-change: opacity, transform; // Оптимизирует анимацию
+  }
+}

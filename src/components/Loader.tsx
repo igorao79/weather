@@ -1,3 +1,5 @@
+import '../styles/components/loader.scss';
+
 interface LoaderProps {
   message?: string;
 }

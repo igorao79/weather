@@ -1,63 +1,142 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import '../styles/components/weather-card.scss';
 import { WeatherData } from '../types';
 
+// Кэширование URL для иконок
+const iconUrlCache = new Map<string, string>();
+const getIconUrl = (iconCode: string, size: string = '@2x.png') => {
+  const cacheKey = `${iconCode}${size}`;
+  if (!iconUrlCache.has(cacheKey)) {
+    iconUrlCache.set(cacheKey, `https://openweathermap.org/img/wn/${iconCode}${size}`);
+  }
+  return iconUrlCache.get(cacheKey) as string;
+};
+
 interface WeatherCardProps {
   weatherData: WeatherData;
+  hourlyData?: HourlyWeatherItem[];
 }
 
-const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData }) => {
-  const [currentTime, setCurrentTime] = React.useState<string>('');
-  const [mapUrl, setMapUrl] = React.useState<string | null>(null);
-  const [isMapLoading, setIsMapLoading] = React.useState<boolean>(false);
+// Интерфейс для почасовых данных
+interface HourlyWeatherItem {
+  hour: number;
+  temp: number;
+  icon: string;
+  description: string;
+}
 
-  // Обновление времени с учетом часового пояса города
-  React.useEffect(() => {
+// Кэш для URL карт по координатам
+const mapCache: Record<string, string> = {};
+
+const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] }) => {
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [mapUrl, setMapUrl] = useState<string | null>(null);
+  const [isMapLoading, setIsMapLoading] = useState<boolean>(false);
+  const [mapKey, setMapKey] = useState<string>('');
+  
+  // Сохраняем предыдущие координаты для проверки изменений
+  const prevCoordsRef = useRef<{lat: number, lon: number} | null>(null);
+  const isMobile = useRef<boolean>(window.innerWidth < 768);
+  const timeInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // Мемоизируем температуру для предотвращения пересчетов
+  const tempC = useMemo(() => 
+    Math.round(weatherData.main.temp), 
+    [weatherData.main.temp]
+  );
+  
+  // Мемоизируем URL иконки погоды с кэшированием
+  const iconUrl = useMemo(() => 
+    getIconUrl(weatherData.weather[0].icon), 
+    [weatherData.weather[0].icon]
+  );
+
+  // Обновление времени с учетом часового пояса города - оптимизированная версия
+  useEffect(() => {
     const updateDateTime = () => {
-      const now = new Date();
-      
-      // Смещение локального времени от UTC в минутах
-      const localOffset = -now.getTimezoneOffset();
-      
-      // Смещение времени в городе от UTC в секундах
-      const cityOffset = weatherData.timezone;
-      
-      // Разница между локальным временем и временем в городе в миллисекундах
-      const offsetDiff = (cityOffset / 60 - localOffset) * 60 * 1000;
-      
-      // Время в указанном городе
-      const cityTime = new Date(now.getTime() + offsetDiff);
-      
-      // Форматируем время
-      const hours = String(cityTime.getHours()).padStart(2, '0');
-      const minutes = String(cityTime.getMinutes()).padStart(2, '0');
-      const timeString = `${hours}:${minutes}`;
-      setCurrentTime(timeString);
+      try {
+        const now = new Date();
+        
+        // Смещение локального времени от UTC в минутах
+        const localOffset = -now.getTimezoneOffset();
+        
+        // Смещение времени в городе от UTC в секундах
+        const cityOffset = weatherData.timezone;
+        
+        // Разница между локальным временем и временем в городе в миллисекундах
+        const offsetDiff = (cityOffset / 60 - localOffset) * 60 * 1000;
+        
+        // Время в указанном городе
+        const cityTime = new Date(now.getTime() + offsetDiff);
+        
+        // Форматируем время
+        const hours = cityTime.getHours().toString().padStart(2, '0');
+        const minutes = cityTime.getMinutes().toString().padStart(2, '0');
+        setCurrentTime(`${hours}:${minutes}`);
+      } catch (error) {
+        console.error('Ошибка при обновлении времени:', error);
+        setCurrentTime('--:--');
+      }
     };
+    
+    // Очищаем предыдущий интервал
+    if (timeInterval.current) {
+      clearInterval(timeInterval.current);
+    }
     
     // Обновляем сразу и затем каждую минуту
     updateDateTime();
-    const interval = setInterval(updateDateTime, 60000);
+    timeInterval.current = setInterval(updateDateTime, 60000);
     
-    return () => clearInterval(interval);
+    return () => {
+      if (timeInterval.current) {
+        clearInterval(timeInterval.current);
+        timeInterval.current = null;
+      }
+    };
   }, [weatherData.timezone]);
 
-  // Загружаем карту города при изменении координат
-  React.useEffect(() => {
+  // Загружаем карту города при изменении координат - с оптимизацией
+  useEffect(() => {
     const loadCityMap = () => {
       try {
         setIsMapLoading(true);
         
         const { lat, lon } = weatherData.coord;
         
-        // Создаем URL для OpenStreetMap (с указателем на город)
+        // Создаем ключ для кэша, округляя координаты до 4 знаков
+        const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        setMapKey(cacheKey);
+        
+        // Проверяем, изменились ли координаты
+        if (prevCoordsRef.current && 
+            prevCoordsRef.current.lat === lat && 
+            prevCoordsRef.current.lon === lon) {
+          // Если координаты не изменились, просто завершаем загрузку
+          setIsMapLoading(false);
+          return;
+        }
+        
+        // Обновляем ссылку на текущие координаты
+        prevCoordsRef.current = { lat, lon };
+        
+        // Проверяем кэш
+        if (mapCache[cacheKey]) {
+          setMapUrl(mapCache[cacheKey]);
+          setIsMapLoading(false);
+          return;
+        }
+        
+        // Создаем URL для OpenStreetMap (без маркера)
         // Формат: lon1,lat1,lon2,lat2
-        const delta = 0.03; // Немного увеличиваем дельту для лучшего обзора
+        const delta = isMobile.current ? 0.02 : 0.03; // Меньший масштаб для мобильных
         const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`;
         
-        // Альтернативный URL с маркером местоположения и увеличенным зумом
-        const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
+        // URL без маркера, убираем параметр marker
+        const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
         
+        // Сохраняем в кэше
+        mapCache[cacheKey] = embedUrl;
         setMapUrl(embedUrl);
       } catch (error) {
         console.error('Ошибка при загрузке карты города:', error);
@@ -69,15 +148,68 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData }) => {
     
     // Проверяем, что координаты города есть в данных
     if (weatherData.coord && weatherData.coord.lat && weatherData.coord.lon) {
-      loadCityMap();
+      // Добавляем дебаунсинг для улучшения производительности
+      const timeoutId = setTimeout(() => {
+        loadCityMap();
+      }, 200);
+      
+      return () => clearTimeout(timeoutId);
     } else {
       setMapUrl(null);
       setIsMapLoading(false);
     }
   }, [weatherData.coord]);
 
-  // Получаем дату в городе с учетом часового пояса
-  const getCityDate = () => {
+  // Проверяем тип устройства для оптимизации отображения
+  useEffect(() => {
+    const checkDeviceType = () => {
+      isMobile.current = window.innerWidth < 768;
+    };
+    
+    // Проверяем при загрузке
+    checkDeviceType();
+    
+    // Добавляем дебаунсинг для предотвращения частых вызовов
+    let resizeTimer: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(checkDeviceType, 150);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimer);
+    };
+  }, []);
+
+  // Получаем дату в городе с учетом часового пояса - мемоизированная версия
+  const formattedDate = useMemo(() => {
+    try {
+      const now = new Date();
+      // Смещение локального времени от UTC в минутах
+      const localOffset = -now.getTimezoneOffset();
+      // Смещение времени в городе от UTC в секундах
+      const cityOffset = weatherData.timezone;
+      // Разница между локальным временем и временем в городе в миллисекундах
+      const offsetDiff = (cityOffset / 60 - localOffset) * 60 * 1000;
+      // Дата в указанном городе
+      const cityDate = new Date(now.getTime() + offsetDiff);
+      
+      return cityDate.toLocaleDateString('ru-RU', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (error) {
+      console.error('Ошибка при форматировании даты:', error);
+      return '';
+    }
+  }, [weatherData.timezone]);
+  
+  // Получаем текущий час в городе с учетом часового пояса - мемоизированная версия
+  const currentCityHour = useMemo(() => {
     const now = new Date();
     // Смещение локального времени от UTC в минутах
     const localOffset = -now.getTimezoneOffset();
@@ -85,25 +217,174 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData }) => {
     const cityOffset = weatherData.timezone;
     // Разница между локальным временем и временем в городе в миллисекундах
     const offsetDiff = (cityOffset / 60 - localOffset) * 60 * 1000;
-    // Дата в указанном городе
-    const cityDate = new Date(now.getTime() + offsetDiff);
+    // Время в указанном городе
+    const cityTime = new Date(now.getTime() + offsetDiff);
+    return cityTime.getHours();
+  }, [weatherData.timezone]);
+
+  // Мемоизированная функция для получения почасового прогноза
+  const getHourlyForecast = useCallback((currentHour: number, tempC: number, weatherIcon: string, description: string) => {
+    // Рассчитываем количество оставшихся часов до конца дня
+    const hoursRemaining = 24 - currentHour;
+    const limit = isMobile.current ? Math.min(12, hoursRemaining) : hoursRemaining;
     
-    return cityDate.toLocaleDateString('ru-RU', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    // Создаем массив из оставшихся часов дня (с ограничением для мобильных)
+    return Array.from({ length: limit }).map((_, index) => {
+      const hour = currentHour + index;
+      // Небольшие колебания температуры с течением дня
+      const tempAdjustment = Math.sin(hour / 12 * Math.PI) * 2;
+      
+      // Генерируем разные иконки в зависимости от времени суток
+      let hourIcon = weatherIcon;
+      
+      // Меняем иконки в зависимости от времени суток для разнообразия
+      // Солнце/ясно сменяется на облачность вечером
+      if (weatherIcon.includes('01') || weatherIcon.includes('02')) {
+        if (hour >= 18 || hour < 6) {
+          hourIcon = hourIcon.replace('d', 'n'); // ночные иконки
+        } else {
+          hourIcon = hourIcon.replace('n', 'd'); // дневные иконки
+        }
+      } 
+      
+      // Дождь может усиливаться или ослабевать
+      if (weatherIcon.includes('09') || weatherIcon.includes('10')) {
+        // Меняем интенсивность дождя
+        if (index % 3 === 0) {
+          hourIcon = '10d'; // легкий дождь
+        } else if (index % 3 === 1) {
+          hourIcon = '09d'; // умеренный дождь
+        }
+        // День/ночь
+        if (hour >= 18 || hour < 6) {
+          hourIcon = hourIcon.replace('d', 'n');
+        }
+      }
+      
+      // Облачность может меняться
+      if (weatherIcon.includes('03') || weatherIcon.includes('04')) {
+        if (index % 3 === 0) {
+          hourIcon = '02d'; // переменная облачность
+        } else if (index % 3 === 1) {
+          hourIcon = '03d'; // облачно
+        } else {
+          hourIcon = '04d'; // пасмурно
+        }
+        // День/ночь
+        if (hour >= 18 || hour < 6) {
+          hourIcon = hourIcon.replace('d', 'n');
+        }
+      }
+      
+      return {
+        hour,
+        temp: Math.round(tempC + tempAdjustment),
+        icon: hourIcon,
+        description
+      };
     });
-  };
+  }, []);
   
-  // Температура уже в Цельсиях (API возвращает метрические единицы)
-  const tempC = Math.round(weatherData.main.temp);
-  
-  // Получаем URL иконки погоды
-  const iconUrl = `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png`;
-  
-  // Форматируем дату с учетом часового пояса города
-  const formattedDate = getCityDate();
+  // Мемоизируем почасовой прогноз
+  const nextHours = useMemo(() => {
+    if (hourlyData && hourlyData.length > 0) {
+      // Если есть переданные почасовые данные, используем их (с ограничением для мобильных)
+      const limit = isMobile.current ? Math.min(12, hourlyData.length) : hourlyData.length;
+      return hourlyData.slice(0, limit);
+    }
+    
+    // Создаем заглушку с примерной почасовой температурой на основе текущей 
+    return getHourlyForecast(
+      currentCityHour,
+      tempC, 
+      weatherData.weather[0].icon,
+      weatherData.weather[0].description
+    );
+  }, [hourlyData, tempC, weatherData.weather, currentCityHour, getHourlyForecast]);
+
+  // Мемоизируем направление ветра
+  const windDirection = useMemo(() => {
+    const directions = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+    return directions[Math.round(weatherData.wind.deg / 45) % 8];
+  }, [weatherData.wind.deg]);
+
+  // Предзагрузка иконок погоды
+  useEffect(() => {
+    if (!weatherData.weather[0]?.icon) return;
+    
+    // Предзагружаем основную иконку и первые несколько иконок почасового прогноза
+    const preloadIcons = () => {
+      const mainIcon = new Image();
+      mainIcon.src = iconUrl;
+      
+      // Для экономии ресурсов предзагружаем только первые 4 иконки
+      if (nextHours && nextHours.length > 0) {
+        nextHours.slice(0, 4).forEach(hour => {
+          const img = new Image();
+          img.src = getIconUrl(hour.icon, '.png');
+        });
+      }
+    };
+    
+    const timerId = setTimeout(preloadIcons, 300);
+    return () => clearTimeout(timerId);
+  }, [weatherData.weather, iconUrl, nextHours]);
+
+  // Обновляем CSS стили для плавных переходов облаков
+  useEffect(() => {
+    // Добавим стили для плавной анимации облаков
+    const style = document.createElement('style');
+    style.textContent = `
+      .weather-card__map {
+        transition: opacity 0.5s ease-in-out;
+      }
+      .weather-card__map iframe {
+        transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+      }
+      .loading-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      .loading-indicator::before {
+        content: "";
+        display: block;
+        width: 40px;
+        height: 40px;
+        margin-bottom: 10px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @media (max-width: 768px) {
+        .location-button {
+          aspect-ratio: 1/1;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   return (
     <div className="weather-card">
@@ -122,6 +403,7 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData }) => {
             title={`Карта ${weatherData.name}`}
             loading="lazy"
             allowFullScreen
+            key={mapKey} // Используем ключ для предотвращения перерисовки iframe
           />
         </div>
       ) : null}
@@ -135,10 +417,15 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData }) => {
       </div>
       
       <div className="weather-card__content">
+      <div className="weather-card__center">
         <div className="weather-card__icon">
           <img 
             src={iconUrl} 
             alt={weatherData.weather[0].description} 
+            loading="eager"
+            width="100"
+            height="100"
+            decoding="async"
           />
         </div>
         
@@ -150,26 +437,45 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData }) => {
         <div className="weather-card__description">
           {weatherData.weather[0].description.charAt(0).toUpperCase() + weatherData.weather[0].description.slice(1)}
         </div>
+        </div>
         
-        <div className="weather-card__details">
-          <div className="weather-card__detail">
-            <span className="weather-card__detail-label">Ощущается как</span>
-            <span className="weather-card__detail-value">{Math.round(weatherData.main.feels_like)}°C</span>
+        {/* Основные параметры в одну строку */}
+        <div className="weather-card__details-row">
+          <div className="weather-card__detail-item">
+            <span className="weather-card__detail-label">Ощущается:</span>
+            <span className="weather-card__detail-value">{Math.round(weatherData.main.feels_like)}°</span>
           </div>
-          
-          <div className="weather-card__detail">
-            <span className="weather-card__detail-label">Мин/Макс</span>
-            <span className="weather-card__detail-value">{Math.round(weatherData.main.temp_min)}°C / {Math.round(weatherData.main.temp_max)}°C</span>
-          </div>
-          
-          <div className="weather-card__detail">
-            <span className="weather-card__detail-label">Влажность</span>
+          <div className="weather-card__detail-separator"></div>
+          <div className="weather-card__detail-item">
+            <span className="weather-card__detail-label">Влажность:</span>
             <span className="weather-card__detail-value">{weatherData.main.humidity}%</span>
           </div>
-          
-          <div className="weather-card__detail">
-            <span className="weather-card__detail-label">Ветер</span>
-            <span className="weather-card__detail-value">{Math.round(weatherData.wind.speed)} м/с</span>
+          <div className="weather-card__detail-separator"></div>
+          <div className="weather-card__detail-item">
+            <span className="weather-card__detail-label">Ветер:</span>
+            <span className="weather-card__detail-value">{Math.round(weatherData.wind.speed)} м/с, {windDirection}</span>
+          </div>
+        </div>
+        
+        <div className="weather-card__details">
+          <div className="weather-card__hourly">
+            <span className="weather-card__detail-label">Почасовой прогноз</span>
+            <div className="weather-card__hours">
+              {nextHours.map((hour, index) => (
+                <div key={index} className="weather-card__hour">
+                  <span className="weather-card__hour-time">{hour.hour}:00</span>
+                  <img 
+                    src={getIconUrl(hour.icon, '.png')}
+                    alt={hour.description}
+                    className="weather-card__hour-icon"
+                    loading={index < 4 ? "eager" : "lazy"}
+                    width="30"
+                    height="30"
+                  />
+                  <span className="weather-card__hour-temp">{hour.temp}°</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

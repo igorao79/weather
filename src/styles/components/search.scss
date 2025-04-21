@@ -1,53 +1,67 @@
 .search {
-  margin-bottom: 30px;
+  width: 100%;
+  margin: 0 auto 20px;
   
   &__form {
     display: flex;
+    align-items: center;
     gap: 10px;
   }
   
   &__input {
     flex: 1;
-    background-color: var(--primary-color);
-    border: none;
+    height: 50px;
+    padding: 0 15px;
     border-radius: 10px;
-    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(30, 33, 58, 0.8);
     color: var(--text-color);
-    box-shadow: var(--shadow);
     font-size: 1rem;
-    transition: box-shadow 0.3s ease;
-    
-    &:focus {
-      outline: none;
-      box-shadow: 0 0 0 2px var(--highlight-color);
-    }
+    font-family: var(--main-font);
     
     &::placeholder {
       color: var(--light-text-color);
+      font-family: var(--secondary-font);
+    }
+    
+    &:focus {
+      outline: none;
+      border-color: var(--highlight-color);
+      box-shadow: 0 0 0 2px rgba(60, 71, 233, 0.3);
+    }
+    
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   }
   
   &__button {
-    background-color: var(--highlight-color);
-    border: none;
+    height: 50px;
+    padding: 0 20px;
     border-radius: 10px;
-    padding: 15px 20px;
-    color: var(--text-color);
+    background-color: var(--highlight-color);
+    color: #fff;
+    border: none;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.2s ease;
+    transition: all 0.2s ease;
+    font-family: var(--main-font);
     
     &:hover {
-      background-color: darken(#3c47e9, 10%);
+      background-color: darken(#3C47E9, 10%);
+      transform: translateY(-2px);
     }
     
     &:active {
-      transform: scale(0.98);
+      transform: translateY(1px);
     }
     
-    &:focus {
-      outline: none;
-      box-shadow: 0 0 0 2px var(--text-color);
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
     }
   }
   
@@ -55,6 +69,8 @@
     background-color: var(--primary-color);
     border: none;
     border-radius: 50%;
+    min-width: 48px;
+    min-height: 48px;
     width: 48px;
     height: 48px;
     display: flex;
@@ -62,6 +78,8 @@
     justify-content: center;
     cursor: pointer;
     transition: background-color 0.3s ease;
+    padding: 0;
+    flex-shrink: 0;
     
     &:hover {
       background-color: lighten(#1e213a, 5%);
@@ -76,6 +94,37 @@
       width: 22px;
       height: 22px;
       fill: var(--text-color);
+    }
+  }
+}
+
+/* Оптимизация для мобильных устройств */
+@media (max-width: 480px) {
+  .search {
+    &__form {
+      gap: 8px;
+    }
+    
+    &__input {
+      padding: 12px;
+      font-size: 0.9rem;
+    }
+    
+    &__button {
+      padding: 12px 15px;
+      font-size: 0.9rem;
+    }
+    
+    &__location-btn {
+      min-width: 42px;
+      min-height: 42px;
+      width: 42px;
+      height: 42px;
+      
+      svg {
+        width: 20px;
+        height: 20px;
+      }
     }
   }
 } 

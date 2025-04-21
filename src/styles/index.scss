@@ -1,4 +1,3 @@
-    
 /* Переменные */
 :root {
   --primary-color: #1E213A;
@@ -8,6 +7,10 @@
   --highlight-color: #3C47E9;
   --shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
   --error-color: #ff5b5b;
+  
+  /* Font variables */
+  --main-font: 'Seymour One', sans-serif;
+  --secondary-font: 'Neucha', cursive;
   
   /* Weather animation colors */
   --sun-color: #ffdc7a;
@@ -34,7 +37,7 @@
 }
 
 body {
-  font-family: 'Raleway', sans-serif;
+  font-family: var(--main-font);
   background-color: var(--secondary-color);
   color: var(--text-color);
   min-height: 100vh;
@@ -47,10 +50,10 @@ body {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
   position: relative;
   z-index: 2;
-  
+  padding: 5px 20px;
+
   @media (max-width: 768px) {
     padding: 15px;
     overflow: hidden;
@@ -59,8 +62,18 @@ body {
 
 /* Типографика */
 h1, h2, h3, h4, h5, h6 {
+  font-family: var(--main-font);
   font-weight: 700;
   margin-bottom: 0.5rem;
+}
+
+/* Стили для маленьких заголовков и текстовых меток */
+.forecast__temp-label,
+.forecast__hourly-hour,
+.search__input::placeholder,
+.weather-card__temperature-unit,
+.weather-card__detail-label {
+  font-family: var(--secondary-font);
 }
 
 /* Анимации для сообщений об ошибке */
