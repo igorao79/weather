@@ -335,14 +335,23 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
     // Добавим стили для плавной анимации облаков и предотвращения исчезновения карты при прокрутке
     const style = document.createElement('style');
     style.textContent = `
+      /* Фикс для предотвращения черного прямоугольника при скролле */
+      body * {
+        transform-style: flat;
+      }
+      
       .weather-card {
         contain: layout; /* Улучшает производительность изоляцией */
+        transform-style: flat;
       }
+      
       .weather-card__map {
         transition: opacity 0.5s ease-in-out;
         contain: paint; /* Изолирует перерисовку */
         transform-style: preserve-3d; /* Помогает с GPU-рендерингом */
+        z-index: -1;
       }
+      
       .weather-card__map iframe {
         transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
         transform: translate3d(0, 0, 0) scale(1.1);
@@ -351,10 +360,12 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
         z-index: -1;
         transform-style: preserve-3d;
       }
+      
       .weather-card__map::after {
         transform: translateZ(0);
         will-change: transform;
       }
+      
       .loading-indicator {
         position: absolute;
         top: 50%;
@@ -367,6 +378,7 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
         justify-content: center;
         width: 100%;
       }
+      
       .loading-indicator::before {
         content: "";
         display: block;
@@ -378,9 +390,11 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
         border-top-color: #fff;
         animation: spin 1s ease-in-out infinite;
       }
+      
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
+      
       @media (max-width: 768px) {
         .location-button {
           aspect-ratio: 1/1;
@@ -392,6 +406,17 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
           border-radius: 50%;
         }
       }
+      
+      /* Скрываем черный прямоугольник при скролле */
+      @media (max-width: 768px) {
+        body {
+          background-color: var(--secondary-color) !important;
+        }
+        
+        .weather-card {
+          background-color: rgba(30, 33, 58, 0.9) !important;
+        }
+      }
     `;
     document.head.appendChild(style);
     
@@ -400,32 +425,68 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
     };
   }, []);
 
-  // Предотвращаем исчезновение карты при скроллинге
+  // Предотвращаем исчезновение карты при скроллинге без изменения глобальных стилей
   useEffect(() => {
-    const preventMapDisappearing = () => {
-      const mapElements = document.querySelectorAll('.weather-card__map iframe');
-      if (mapElements.length > 0) {
-        // Принудительно обновляем трансформацию для предотвращения исчезновения
-        mapElements.forEach((map: Element) => {
-          if (map instanceof HTMLElement) {
-            map.style.transform = 'scale(1.1) translateZ(0)';
-            map.style.willChange = 'transform';
-            // Важно: триггер repaint
-            void map.offsetHeight;
-          }
-        });
+    // Функция для фиксации карты при скролле
+    const handleScroll = () => {
+      const iframes = document.querySelectorAll('.weather-card__map iframe');
+      const cardMaps = document.querySelectorAll('.weather-card__map');
+      const cards = document.querySelectorAll('.weather-card');
+      
+      iframes.forEach((iframe: Element) => {
+        if (iframe instanceof HTMLIFrameElement) {
+          // Обновляем стили для предотвращения исчезновения
+          iframe.style.transform = 'scale(1.1) translateZ(0)';
+          iframe.style.willChange = 'transform';
+        }
+      });
+      
+      // Убеждаемся, что карты не исчезают
+      cardMaps.forEach((map: Element) => {
+        if (map instanceof HTMLElement) {
+          map.style.willChange = 'transform';
+          map.style.transform = 'translateZ(0)';
+        }
+      });
+      
+      // Убеждаемся, что у карточек правильный фон
+      cards.forEach((card: Element) => {
+        if (card instanceof HTMLElement) {
+          card.style.backgroundColor = 'rgba(30, 33, 58, 0.9)';
+        }
+      });
+      
+      // Обновляем боди, чтобы не было черного фона
+      document.body.style.backgroundColor = 'var(--secondary-color)';
+    };
+    
+    // Эффективная подписка на скролл
+    let scrollTimeout: ReturnType<typeof setTimeout>;
+    const throttledScroll = () => {
+      if (!scrollTimeout) {
+        scrollTimeout = setTimeout(() => {
+          handleScroll();
+          scrollTimeout = 0 as unknown as ReturnType<typeof setTimeout>;
+        }, 100);
       }
     };
-
-    // Вызываем обновление при скролле
-    window.addEventListener('scroll', preventMapDisappearing, { passive: true });
     
-    // Также обновляем периодически для надежности
-    const intervalId = setInterval(preventMapDisappearing, 2000);
+    window.addEventListener('scroll', throttledScroll, { passive: true });
+    window.addEventListener('touchmove', throttledScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
+    
+    // Запускаем сразу при монтировании
+    handleScroll();
+    
+    // Регулярно обновляем
+    const intervalId = setInterval(handleScroll, 1000);
     
     return () => {
-      window.removeEventListener('scroll', preventMapDisappearing);
+      window.removeEventListener('scroll', throttledScroll);
+      window.removeEventListener('touchmove', throttledScroll);
+      window.removeEventListener('resize', handleScroll);
       clearInterval(intervalId);
+      clearTimeout(scrollTimeout);
     };
   }, [mapUrl]);
 

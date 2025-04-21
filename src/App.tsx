@@ -63,31 +63,82 @@ function App() {
 
   // Функция для получения погоды по геолокации
   const fetchWeatherByLocation = async () => {
-    setLoading(true);
-    setError(null);
-    
     try {
+      setLoading(true);
+      setError(null);
+      
+      // Проверка на наличие геолокации в браузере
       if (!navigator.geolocation) {
         throw new Error('Геолокация не поддерживается вашим браузером');
       }
       
+      // Более точная проверка на WebView (Telegram и другие)
+      const ua = navigator.userAgent;
+      const isMobileApp = /WebView|TelegramWebApp|Instagram|FB(AN|AV)|Line|KAKAOTALK|NAVER|trill|zalo|zalaupdate/i.test(ua);
+      const isInAppBrowser = /TelegramWebViewProxy/i.test(navigator.userAgent) || 
+                             window.hasOwnProperty('TelegramWebviewProxy') ||
+                             document.referrer.includes('t.me') ||
+                             document.referrer.includes('telegram.me') ||
+                             /Telegram/i.test(document.referrer);
+      
+      // Более точная проверка на Telegram
+      const isTelegram = isInAppBrowser || 
+                         /Telegram/i.test(ua) || 
+                         (window as any).Telegram || 
+                         (window as any).TelegramWebviewProxy;
+      
+      // Для Telegram показываем специальное сообщение
+      if (isTelegram) {
+        throw new Error('Для определения местоположения, пожалуйста, откройте сайт в браузере. Приложение Telegram не предоставляет доступ к геолокации.');
+      } else if (isMobileApp) {
+        throw new Error('Для определения местоположения откройте сайт в браузере, а не во встроенном просмотрщике.');
+      }
+      
+      // Получаем текущую позицию с таймаутом
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
+        const geoTimeout = setTimeout(() => {
+          reject(new Error('Превышено время ожидания геолокации. Пожалуйста, попробуйте снова.'));
+        }, 10000); // 10 секунд таймаут
+        
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            clearTimeout(geoTimeout);
+            resolve(pos);
+          },
+          (err) => {
+            clearTimeout(geoTimeout);
+            reject(err);
+          },
+          { 
+            enableHighAccuracy: true, 
+            timeout: 5000, 
+            maximumAge: 0 
+          }
+        );
       });
       
       const { latitude, longitude } = position.coords;
-      const weatherData = await getWeatherByCoords(latitude, longitude);
-      const forecastData = await getForecastByCoords(latitude, longitude);
       
+      // Получаем текущую погоду
+      const weatherData = await getWeatherByCoords(latitude, longitude);
       setWeatherData(weatherData);
-      setForecastData(transformForecastData(forecastData));
+      
+      // Получаем прогноз
+      const forecastData = await getForecastByCoords(latitude, longitude);
+      const processedForecasts = transformForecastData(forecastData);
+      setForecastData(processedForecasts);
       setOriginalForecastData(forecastData); // Сохраняем оригинальные данные
-    } catch (error: any) {
-      console.error('Ошибка при получении геолокации:', error);
-      if (error.response && error.response.status === 401) {
-        setError('Ошибка авторизации API. Пожалуйста, проверьте ваш API ключ в файле api.ts или зарегистрируйте новый ключ на openweathermap.org.');
+    } catch (err: any) {
+      console.error('Ошибка при получении погоды по геолокации:', err);
+      
+      if (err.code === 1) {
+        setError('Для определения вашего местоположения необходимо предоставить разрешение на использование геолокации.');
+      } else if (err.code === 2) {
+        setError('Не удалось определить ваше местоположение. Проверьте, включена ли у вас геолокация.');
+      } else if (err.code === 3) {
+        setError('Превышено время ожидания при определении местоположения. Пожалуйста, попробуйте снова.');
       } else {
-        setError('Не удалось определить ваше местоположение. Пожалуйста, введите город вручную.');
+        setError(err.message || 'Произошла ошибка при определении местоположения.');
       }
     } finally {
       setLoading(false);

@@ -13,8 +13,19 @@
   backdrop-filter: blur(5px);
   background-color: rgba(30, 33, 58, 0.8);
   isolation: isolate; /* Создает новый контекст наложения, помогает с z-index и производительностью */
+  -webkit-mask-image: -webkit-radial-gradient(white, black); /* Исправляет проблему с overflow на iOS */
   
-
+  /* Предотвращаем появление черного прямоугольника при скроллинге */
+  &::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background-color: var(--primary-color);
+    z-index: -2;
+  }
   
   &__map {
     position: absolute;
@@ -56,6 +67,8 @@
       backface-visibility: hidden;
       will-change: transform;
       z-index: -1;
+      -webkit-transform-style: preserve-3d;
+      transform-style: preserve-3d;
     }
     
     &--loading {
