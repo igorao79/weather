@@ -12,6 +12,7 @@
   overflow: hidden;
   backdrop-filter: blur(5px);
   background-color: rgba(30, 33, 58, 0.8);
+  isolation: isolate; /* Создает новый контекст наложения, помогает с z-index и производительностью */
   
 
   
@@ -23,6 +24,11 @@
     height: 100%;
     z-index: -1;
     overflow: hidden;
+    -webkit-backface-visibility: hidden; /* Оптимизирует производительность на iOS */
+    backface-visibility: hidden;
+    -webkit-transform: translateZ(0); /* Включает GPU-ускорение на iOS */
+    transform: translateZ(0);
+    will-change: transform; /* Оптимизирует производительность анимаций */
     
     &::after {
       content: '';
@@ -34,6 +40,8 @@
       background: linear-gradient(rgba(30, 33, 58, 0.4), rgba(30, 33, 58, 0.9));
       z-index: 1;
       pointer-events: none;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
     }
     
     iframe {
@@ -41,9 +49,13 @@
       height: 110%; /* Немного больше для компенсации масштабирования */
       opacity: 0.6;
       filter: grayscale(50%) contrast(110%) brightness(60%);
-      transform: scale(1.1); /* Небольшое увеличение карты для заполнения контейнера */
+      transform: scale(1.1) translateZ(0); /* Небольшое увеличение карты для заполнения контейнера + GPU ускорение */
       transition: all 0.3s ease;
       pointer-events: none; /* Отключаем взаимодействие с картой в фоне */
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      will-change: transform;
+      z-index: -1;
     }
     
     &--loading {

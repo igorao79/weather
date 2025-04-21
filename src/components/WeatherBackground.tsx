@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { WeatherData } from '../types';
 
 interface WeatherBackgroundProps {
@@ -45,6 +45,29 @@ const getWeatherCondition = (weatherData: WeatherData): 'clear' | 'clouds' | 'ra
   return 'clear';
 };
 
+// Обнаружение мобильных устройств для упрощения анимаций
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile(); // Проверка при монтировании
+    
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+};
+
+// Уменьшим количество элементов в анимациях для мобильных устройств
+const getReducedCount = (baseCount: number, isMobile: boolean): number => {
+  return isMobile ? Math.floor(baseCount * 0.4) : baseCount;
+};
+
 // Component for sun effect
 const SunEffect = ({ intensity = 1 }) => {
   return (
@@ -68,15 +91,18 @@ const MoonEffect = () => {
 
 // Component for raining effect
 const RainEffect = () => {
+  const isMobile = useIsMobile();
+  const raindropCount = getReducedCount(150, isMobile);
+  
   const raindrops = useMemo(() => {
-    return Array.from({ length: 150 }).map((_, i) => ({
+    return Array.from({ length: raindropCount }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       duration: 0.5 + Math.random() * 0.5,
       delay: Math.random() * 5,
       opacity: 0.5 + Math.random() * 0.5,
     }));
-  }, []);
+  }, [raindropCount]);
   
   return (
     <div className="weather-animation__rain">
@@ -98,8 +124,11 @@ const RainEffect = () => {
 
 // Component for snow effect
 const SnowEffect = () => {
+  const isMobile = useIsMobile();
+  const snowflakeCount = getReducedCount(80, isMobile);
+  
   const snowflakes = useMemo(() => {
-    return Array.from({ length: 80 }).map((_, i) => ({
+    return Array.from({ length: snowflakeCount }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       size: 2 + Math.random() * 5,
@@ -107,7 +136,7 @@ const SnowEffect = () => {
       delay: Math.random() * 5,
       opacity: 0.7 + Math.random() * 0.3,
     }));
-  }, []);
+  }, [snowflakeCount]);
   
   return (
     <div className="weather-animation__snow">
@@ -131,10 +160,15 @@ const SnowEffect = () => {
 
 // Component for clouds effect with continuous cloud generation
 const CloudsEffect = ({ density = 'normal', immediate = false }) => {
+  const isMobile = useIsMobile();
+  
   // Create cloud groups with different speeds and positions
   const cloudGroups = useMemo(() => {
     // Determine how many clouds based on density
-    const count = density === 'heavy' ? 15 : density === 'light' ? 5 : 10;
+    const baseCounts = { heavy: 15, normal: 10, light: 5 };
+    const countKey = density as keyof typeof baseCounts;
+    const baseCount = baseCounts[countKey] || 10;
+    const count = getReducedCount(baseCount, isMobile);
     
     return Array.from({ length: count }).map((_, i) => ({
       id: i,
@@ -146,7 +180,7 @@ const CloudsEffect = ({ density = 'normal', immediate = false }) => {
       delay: immediate ? 0 : Math.random() * 40,
       zIndex: Math.floor(Math.random() * 3),
     }));
-  }, [density, immediate]);
+  }, [density, immediate, isMobile]);
   
   return (
     <div className="weather-animation__clouds">
@@ -171,8 +205,13 @@ const CloudsEffect = ({ density = 'normal', immediate = false }) => {
 
 // Component for stars effect
 const StarsEffect = ({ density = 'normal' }) => {
+  const isMobile = useIsMobile();
+  
   const stars = useMemo(() => {
-    const count = density === 'heavy' ? 200 : density === 'light' ? 50 : 100;
+    const baseCounts = { heavy: 200, normal: 100, light: 50 };
+    const countKey = density as keyof typeof baseCounts;
+    const baseCount = baseCounts[countKey] || 100;
+    const count = getReducedCount(baseCount, isMobile);
     
     return Array.from({ length: count }).map((_, i) => ({
       id: i,
@@ -183,7 +222,7 @@ const StarsEffect = ({ density = 'normal' }) => {
       delay: Math.random() * 5,
       twinkleType: Math.floor(Math.random() * 3), // Different twinkling patterns
     }));
-  }, [density]);
+  }, [density, isMobile]);
   
   return (
     <div className="weather-animation__stars">
@@ -207,8 +246,11 @@ const StarsEffect = ({ density = 'normal' }) => {
 
 // Component for lightning effect
 const LightningEffect = () => {
+  const isMobile = useIsMobile();
+  const boltCount = getReducedCount(3, isMobile) || 1; // Минимум 1 молния
+  
   const bolts = useMemo(() => {
-    return Array.from({ length: 3 }).map((_, i) => ({
+    return Array.from({ length: boltCount }).map((_, i) => ({
       id: i,
       left: `${20 + Math.random() * 60}%`,
       height: 100 + Math.random() * 200,
@@ -216,7 +258,7 @@ const LightningEffect = () => {
       delay: Math.random() * 10,
       duration: 8 + Math.random() * 5,
     }));
-  }, []);
+  }, [boltCount]);
   
   return (
     <div className="weather-animation__lightning">
@@ -239,15 +281,18 @@ const LightningEffect = () => {
 
 // Component for mist effect
 const MistEffect = () => {
+  const isMobile = useIsMobile();
+  const mistLayerCount = getReducedCount(5, isMobile) || 2; // Минимум 2 слоя тумана
+  
   const mistLayers = useMemo(() => {
-    return Array.from({ length: 5 }).map((_, i) => ({
+    return Array.from({ length: mistLayerCount }).map((_, i) => ({
       id: i,
-      top: `${10 + i * 20}%`,
+      top: `${10 + i * (100 / mistLayerCount)}%`,
       opacity: 0.2 + Math.random() * 0.3,
       speed: 100 + Math.random() * 200,
       delay: Math.random() * 5,
     }));
-  }, []);
+  }, [mistLayerCount]);
   
   return (
     <div className="weather-animation__mist">
@@ -268,6 +313,8 @@ const MistEffect = () => {
 };
 
 const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weatherData }) => {
+  const isMobile = useIsMobile();
+  
   if (!weatherData) return null;
   
   const timeOfDay = getTimeOfDay(weatherData);
@@ -285,43 +332,45 @@ const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weatherData }) =>
                        timeOfDay === 'day' ? 1 : 
                        timeOfDay === 'evening' ? 0.7 : 0;
   
+  // На мобильных устройствах уменьшаем количество эффектов для повышения производительности
+  const showSunMoon = !isMobile || ['clear', 'clouds'].includes(weatherCondition);
+  
   return (
-    <>
-      <div className={`weather-background weather-background--${weatherCondition} weather-background--${timeOfDay}`}>
-        <div className="weather-animation">
-          {/* Day/Night celestial bodies */}
-          {(timeOfDay === 'day' || timeOfDay === 'morning' || timeOfDay === 'evening') && 
-            (weatherCondition === 'clear' || weatherCondition === 'clouds') && 
-            <SunEffect intensity={sunIntensity} />}
-          
-          {(timeOfDay === 'night' || (timeOfDay === 'evening' && weatherCondition !== 'clear')) && 
-            <MoonEffect />}
-          
-          {/* Weather condition effects */}
-          {weatherCondition === 'rain' && <RainEffect />}
-          {weatherCondition === 'snow' && <SnowEffect />}
-          {weatherCondition === 'mist' && <MistEffect />}
-          
-          {/* Clouds with different densities based on condition */}
-          {weatherCondition === 'clouds' && <CloudsEffect density="heavy" immediate={true} />}
-          {weatherCondition === 'rain' && <CloudsEffect density="heavy" immediate={true} />}
-          {weatherCondition === 'snow' && <CloudsEffect density="heavy" immediate={true} />}
-          {shouldShowClouds && <CloudsEffect density="light" immediate={needsImmediateElements} />}
-          {weatherCondition === 'storm' && <CloudsEffect density="heavy" immediate={true} />}
-          
-          {/* Night sky stars */}
-          {(timeOfDay === 'night' || timeOfDay === 'evening') && <StarsEffect density={weatherCondition === 'clear' ? 'heavy' : 'light'} />}
-          
-          {/* Storm effects */}
-          {weatherCondition === 'storm' && (
-            <>
-              <RainEffect />
-              <LightningEffect />
-            </>
-          )}
-        </div>
+    <div className={`weather-background weather-background--${weatherCondition} weather-background--${timeOfDay}`}>
+      <div className="weather-animation">
+        {/* Day/Night celestial bodies - оптимизировано для мобильных */}
+        {showSunMoon && (timeOfDay === 'day' || timeOfDay === 'morning' || timeOfDay === 'evening') && 
+          (weatherCondition === 'clear' || weatherCondition === 'clouds') && 
+          <SunEffect intensity={sunIntensity} />}
+        
+        {showSunMoon && (timeOfDay === 'night' || (timeOfDay === 'evening' && weatherCondition !== 'clear')) && 
+          <MoonEffect />}
+        
+        {/* Weather condition effects */}
+        {weatherCondition === 'rain' && <RainEffect />}
+        {weatherCondition === 'snow' && <SnowEffect />}
+        {weatherCondition === 'mist' && <MistEffect />}
+        
+        {/* Clouds with different densities based on condition */}
+        {weatherCondition === 'clouds' && <CloudsEffect density="heavy" immediate={true} />}
+        {weatherCondition === 'rain' && <CloudsEffect density="heavy" immediate={true} />}
+        {weatherCondition === 'snow' && <CloudsEffect density="heavy" immediate={true} />}
+        {shouldShowClouds && !isMobile && <CloudsEffect density="light" immediate={needsImmediateElements} />}
+        {weatherCondition === 'storm' && <CloudsEffect density="heavy" immediate={true} />}
+        
+        {/* Night sky stars - уменьшаем на мобильных */}
+        {(timeOfDay === 'night' || timeOfDay === 'evening') && 
+          <StarsEffect density={weatherCondition === 'clear' && !isMobile ? 'heavy' : 'light'} />}
+        
+        {/* Storm effects */}
+        {weatherCondition === 'storm' && (
+          <>
+            <RainEffect />
+            {!isMobile && <LightningEffect />}
+          </>
+        )}
       </div>
-    </>
+    </div>
   );
 };
 

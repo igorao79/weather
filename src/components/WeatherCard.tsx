@@ -332,14 +332,28 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
 
   // Обновляем CSS стили для плавных переходов облаков
   useEffect(() => {
-    // Добавим стили для плавной анимации облаков
+    // Добавим стили для плавной анимации облаков и предотвращения исчезновения карты при прокрутке
     const style = document.createElement('style');
     style.textContent = `
+      .weather-card {
+        contain: layout; /* Улучшает производительность изоляцией */
+      }
       .weather-card__map {
         transition: opacity 0.5s ease-in-out;
+        contain: paint; /* Изолирует перерисовку */
+        transform-style: preserve-3d; /* Помогает с GPU-рендерингом */
       }
       .weather-card__map iframe {
         transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        transform: translate3d(0, 0, 0) scale(1.1);
+        will-change: transform;
+        backface-visibility: hidden;
+        z-index: -1;
+        transform-style: preserve-3d;
+      }
+      .weather-card__map::after {
+        transform: translateZ(0);
+        will-change: transform;
       }
       .loading-indicator {
         position: absolute;
@@ -385,6 +399,35 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
       document.head.removeChild(style);
     };
   }, []);
+
+  // Предотвращаем исчезновение карты при скроллинге
+  useEffect(() => {
+    const preventMapDisappearing = () => {
+      const mapElements = document.querySelectorAll('.weather-card__map iframe');
+      if (mapElements.length > 0) {
+        // Принудительно обновляем трансформацию для предотвращения исчезновения
+        mapElements.forEach((map: Element) => {
+          if (map instanceof HTMLElement) {
+            map.style.transform = 'scale(1.1) translateZ(0)';
+            map.style.willChange = 'transform';
+            // Важно: триггер repaint
+            void map.offsetHeight;
+          }
+        });
+      }
+    };
+
+    // Вызываем обновление при скролле
+    window.addEventListener('scroll', preventMapDisappearing, { passive: true });
+    
+    // Также обновляем периодически для надежности
+    const intervalId = setInterval(preventMapDisappearing, 2000);
+    
+    return () => {
+      window.removeEventListener('scroll', preventMapDisappearing);
+      clearInterval(intervalId);
+    };
+  }, [mapUrl]);
 
   return (
     <div className="weather-card">
