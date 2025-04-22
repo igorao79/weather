@@ -1,25 +1,16 @@
 .forecast {
     padding: 10px;
     border-radius: 16px;
-    background-color: rgba(30, 33, 58, 0.7);
-    backdrop-filter: blur(10px);
+    background-color: rgba(30, 33, 58, 0.8);
+    backdrop-filter: blur(5px);
     box-shadow: var(--shadow);
-    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-    overflow: visible;
-    position: relative;
     margin-bottom: 20px;
     display: flex;
     flex-direction: column;
     gap: 15px;
-
-    background-color: var(--primary-color);
-    border-radius: 15px;
-    box-shadow: var(--shadow);
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
-    background-color: rgba(30, 33, 58, 0.8);
     isolation: isolate;
     -webkit-mask-image: -webkit-radial-gradient(white, black);
     mask-image: radial-gradient(white, black);
@@ -67,39 +58,35 @@
       animation: fadeIn 0.6s ease-out;
       position: relative;
       
-      // Планшеты и десктопы
       @media (min-width: 1024px) {
         grid-template-columns: repeat(5, 1fr);
-        grid-auto-rows: min-content; // Важно для предотвращения растягивания
+        grid-auto-rows: min-content;
       }
       
-      // Планшеты - до 1024px
-      @media (min-width: 768px) and (max-width: 1025px) {
+      @media (min-width: 768px) and (max-width: 1023px) {
         grid-template-columns: repeat(3, 1fr);
-        grid-auto-rows: min-content; // Важно для предотвращения растягивания
-        padding-bottom: 30px; // Добавляем отступ внизу
+        grid-auto-rows: min-content;
+        padding-bottom: 30px;
         position: relative;
-        isolation: isolate; // Создаем новый контекст наложения
-        contain: layout size style; // Улучшаем производительность
+        isolation: isolate;
+        contain: layout size style;
         
-        // Добавляем стили для каждого элемента на планшетах
         .forecast__item {
           isolation: isolate;
           position: relative;
           transition: transform 0.3s ease, box-shadow 0.3s ease;
           z-index: 1;
-          contain: layout style; // Улучшаем производительность
-          height: auto; // Фиксированная высота
+          contain: layout style;
+          height: auto;
           
           &--expanded {
-            z-index: 50 !important; // Гарантированно поверх других элементов
+            z-index: 50 !important;
             transition: transform 0.3s ease, box-shadow 0.3s ease, z-index 0s;
-            contain: none; // Отключаем ограничение содержимого
+            contain: none;
           }
         }
       }
       
-      // Мобильные телефоны
       @media (max-width: 767px) {
         display: flex;
         flex-direction: column;
@@ -314,6 +301,20 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
+      }
+      
+      &-fallback {
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: white;
+        text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
       }
     }
     
@@ -530,15 +531,11 @@
 
 // Улучшаем анимацию появления контента
 @keyframes fadeIn {
-  0% {
+  from {
     opacity: 0;
     transform: translateY(10px);
   }
-  50% {
-    opacity: 0.5;
-    transform: translateY(5px);
-  }
-  100% {
+  to {
     opacity: 1;
     transform: translateY(0);
   }
@@ -567,18 +564,17 @@
 // Устраняем дергания анимации
 @media (prefers-reduced-motion: no-preference) {
   .forecast__list {
-    contain: layout style; // Предотвращает изменение размеров
+    contain: layout style;
   }
   
   .forecast__item {
-    backface-visibility: hidden; // Улучшает производительность
-    will-change: transform, box-shadow; // Оптимизирует анимацию
-    transition-delay: 0s; // Убираем задержку для плавности
+    backface-visibility: hidden;
+    will-change: transform, box-shadow;
+    transform: translateZ(0);
   }
   
   .forecast__hourly-container {
-    backface-visibility: hidden; // Улучшает производительность
-    will-change: opacity, transform; // Оптимизирует анимацию
-    transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1); // Плавная кривая
+    backface-visibility: hidden;
+    will-change: opacity, transform;
   }
 }

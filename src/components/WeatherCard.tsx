@@ -179,7 +179,7 @@ const WeatherCard = memo(({ weatherData, hourlyData = [] }: WeatherCardProps) =>
         // Создаем URL для OpenStreetMap (без маркера)
         // Формат: lon1,lat1,lon2,lat2
         const delta = isMobile.current ? 0.02 : 0.03; // Меньший масштаб для мобильных
-        const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`;
+        const bbox = `${(lon - delta).toFixed(6)},${(lat - delta).toFixed(6)},${(lon + delta).toFixed(6)},${(lat + delta).toFixed(6)}`;
         
         // URL без маркера, убираем параметр marker
         const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;

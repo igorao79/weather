@@ -88,38 +88,22 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
     // Проверяем при загрузке
     checkDeviceType();
     
-    // Используем debounced обработчик, чтобы не вызывать функцию слишком часто
+    // Debounced обработчик изменения размера
     let resizeTimer: NodeJS.Timeout;
     const handleResize = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(checkDeviceType, 150);
     };
     
-    // Обрабатываем изменение ориентации для планшетов
-    const handleOrientationChange = () => {
-      checkDeviceType();
-      
-      // Если был открытый элемент, закрываем его при смене ориентации
-      if (hoveredDay && isTablet.current) {
-        setIsAnimating(true);
-        setHoveredDay(null);
-        
-        // Убираем анимацию после закрытия
-        setTimeout(() => {
-          setIsAnimating(false);
-        }, 300);
-      }
-    };
-    
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleOrientationChange);
+    window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('orientationchange', checkDeviceType, { passive: true });
     
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleOrientationChange);
+      window.removeEventListener('orientationchange', checkDeviceType);
       clearTimeout(resizeTimer);
     };
-  }, [hoveredDay]);
+  }, []);
   
   // Мемоизированная функция получения почасовых данных
   const getHourlyData = useCallback((date: Date): HourlyWeatherData[] => {
@@ -127,20 +111,90 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
     
     const targetDate = new Date(date).toISOString().split('T')[0];
     const now = new Date();
+    const currentDate = now.toISOString().split('T')[0];
     const currentHour = now.getHours();
     
-    // Определяем, является ли выбранный день сегодняшним
-    const isToday = new Date().toISOString().split('T')[0] === targetDate;
+    // Проверка, является ли день сегодняшним или завтрашним
+    const isToday = currentDate === targetDate;
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDate = tomorrow.toISOString().split('T')[0];
+    const isTomorrow = tomorrowDate === targetDate;
     
+    // Для сегодняшнего и завтрашнего дня всегда генерируем полный набор часов
+    if (isToday || isTomorrow) {
+      console.log(`GetHourlyData: Генерируем данные для ${isToday ? 'сегодняшнего' : 'завтрашнего'} дня`, targetDate);
+      
+      // Найдем дневной прогноз для этой даты
+      const dayForecast = processedForecasts.find(f => 
+        getDayId(f.date) === targetDate
+      );
+      
+      if (!dayForecast) return [];
+      
+      // Создаем полный массив часов с интервалом 3 часа
+      const allHours = [0, 3, 6, 9, 12, 15, 18, 21];
+      
+      // Для сегодня фильтруем только будущие часы
+      const hoursArray = isToday 
+        ? allHours.filter(h => h >= currentHour) 
+        : allHours;
+      
+      // Если для сегодня не осталось часов, добавим текущий час
+      if (isToday && hoursArray.length === 0) {
+        hoursArray.push(currentHour);
+        
+        // Добавим еще оставшиеся часы с шагом 1 час
+        for (let h = currentHour + 1; h < 24; h++) {
+          hoursArray.push(h);
+          if (hoursArray.length >= 6) break; // не более 6 часов
+        }
+      }
+      
+      // Получаем базовую иконку и описание
+      const baseIcon = dayForecast.icon.replace(/[dn]$/, '');
+      
+      return hoursArray.map(hour => {
+        // Расчет температуры в зависимости от времени суток
+        let tempFactor = 0;
+        if (hour >= 12 && hour <= 15) {
+          tempFactor = 1; // Пик температуры днем
+        } else if (hour >= 3 && hour <= 6) {
+          tempFactor = -1; // Минимум температуры ночью
+        } else if ((hour >= 9 && hour < 12) || (hour > 15 && hour <= 18)) {
+          tempFactor = 0.5; // Переходные периоды
+        } else {
+          tempFactor = -0.5; // Вечер и ночь
+        }
+        
+        const tempSpread = dayForecast.temp_max - dayForecast.temp_min;
+        const midTemp = (dayForecast.temp_max + dayForecast.temp_min) / 2;
+        const temp = midTemp + tempFactor * (tempSpread / 2);
+        
+        // Определяем, день это или ночь
+        const isDaytime = hour >= 6 && hour < 19;
+        const hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
+        
+        return {
+          hour,
+          temp: Math.round(temp),
+          icon: hourIcon,
+          description: dayForecast.description
+        };
+      });
+    }
+    
+    // Для остальных дней используем данные API
     // Фильтруем данные для выбранного дня
-    return data.list.filter(item => {
+    const filteredData = data.list.filter(item => {
       const itemDate = new Date(item.dt * 1000);
       const itemDateStr = itemDate.toISOString().split('T')[0];
-      if (isToday) {
-        return itemDateStr === targetDate && itemDate.getHours() >= currentHour;
-      }
+      
       return itemDateStr === targetDate;
-    }).map(item => {
+    });
+    
+    // Преобразуем отфильтрованные данные
+    return filteredData.map(item => {
       const itemDate = new Date(item.dt * 1000);
       return {
         hour: itemDate.getHours(),
@@ -149,13 +203,14 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
         description: item.weather[0].description
       };
     });
-  }, [data]);
+  }, [data, processedForecasts]);
   
   // Оптимизированный getDailyForecasts для предотвращения лишних вычислений
   function getDailyForecasts() {
     if (!data || !data.list || !Array.isArray(data.list)) return [];
     
     const dailyData: Record<string, any> = {};
+    const todayStr = new Date().toISOString().split('T')[0]; // Получаем сегодняшний день
     
     data.list.forEach(item => {
       const date = new Date(item.dt * 1000);
@@ -178,7 +233,22 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
       dailyData[day].conditions.push(condition);
     });
     
-    return Object.keys(dailyData).slice(0, 5).map(day => {
+    // Получаем все дни, сортируем их по дате
+    const allDays = Object.keys(dailyData).sort();
+    
+    // Находим индекс сегодняшнего дня в отсортированном массиве
+    const todayIndex = allDays.indexOf(todayStr);
+    
+    // Если сегодняшний день найден, начинаем со следующего дня (завтра)
+    // Иначе просто берем первые 6 дней (увеличено с 5 до 6)
+    const startIndex = todayIndex !== -1 ? todayIndex + 1 : 0;
+    
+    // Берем 6 дней, начиная с завтрашнего (увеличено с 5 до 6)
+    const daysToShow = allDays.slice(startIndex, startIndex + 6);
+    
+    console.log("Дни для прогноза:", daysToShow);
+    
+    return daysToShow.map(day => {
       const data = dailyData[day];
       const dayName = new Date(day).toLocaleDateString('ru-RU', { weekday: 'short' });
       
@@ -231,6 +301,16 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
 
   // Функция для получения ID дня
   const getDayId = (date: Date) => date.toISOString().split('T')[0];
+  
+  // Фильтруем сегодняшний день из прогнозов
+  const todayStr = new Date().toISOString().split('T')[0];
+  const filteredForecasts = processedForecasts.filter(forecast => 
+    getDayId(forecast.date) !== todayStr
+  ).slice(0, 5); // И берем только 5 дней начиная с завтрашнего
+  
+  console.log("Отфильтрованные прогнозы:", 
+    filteredForecasts.map(f => ({ date: getDayId(f.date), day: f.day }))
+  );
   
   // Адаптивная функция для определения позиции элемента в сетке
   const getPositionClass = useCallback((index: number) => {
@@ -363,46 +443,51 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
     }
   }, [hoveredDay]);
 
-  // Предзагрузка только самых важных иконок
+  // Предзагрузка иконок с оптимизацией
   useEffect(() => {
     let isMounted = true;
-    let loadedIcons = new Set<string>(); // Кэш для уже загруженных иконок
+    const loadedIcons = new Set<string>();
     
-    // Функция с low priority предзагрузкой
     const preloadIcons = () => {
-      if (processedForecasts.length && isMounted) {
-        // Загружаем иконки всех прогнозов при инициализации
-        processedForecasts.forEach((forecast, index) => {
-          const iconKey = `${forecast.icon}-${index < 2 ? '@2x' : ''}-${forecast.description}`;
-          
-          // Проверяем, не загружалась ли иконка ранее
-          if (!loadedIcons.has(iconKey)) {
-            const img = new Image();
-            img.src = getIconUrl(forecast.icon, index < 2, forecast.description);
-            loadedIcons.add(iconKey);
+      if (!filteredForecasts.length || !isMounted) return;
+      
+      // Загружаем только первые 5 иконок с высоким приоритетом
+      filteredForecasts.slice(0, 5).forEach((forecast) => {
+        const iconKey = `${forecast.icon}-large-${forecast.description}`;
+        if (loadedIcons.has(iconKey)) return;
+        
+        const img = new Image();
+        img.src = getIconUrl(forecast.icon, true, forecast.description);
+        loadedIcons.add(iconKey);
+        
+        // Упрощенная обработка ошибок
+        img.onerror = () => {
+          if (isMounted) {
+            setTimeout(() => img.src = `${getIconUrl(forecast.icon, true, forecast.description)}?retry=true`, 300);
           }
-        });
-      }
+        };
+      });
     };
     
-    // Отложенная предзагрузка для уменьшения нагрузки при загрузке страницы
-    const timer = setTimeout(preloadIcons, 300);
+    // Запускаем предзагрузку сразу и еще раз через небольшую задержку для мобильных
+    preloadIcons();
+    const timer = setTimeout(preloadIcons, 1000);
     
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [processedForecasts]); // Убираем hoveredDay из зависимостей
+  }, [filteredForecasts]);
 
   // Мемоизируем генерацию URL иконок для предотвращения лишних запросов
   const iconUrlMemo = useMemo(() => {
-    const cache: Record<string, string> = {};
+    const cache = new Map<string, string>();
     return (icon: string, large: boolean, description?: string) => {
       const key = `${icon}-${large ? 'large' : 'small'}-${description || ''}`;
-      if (!cache[key]) {
-        cache[key] = getIconUrl(icon, large, description);
+      if (!cache.has(key)) {
+        cache.set(key, getIconUrl(icon, large, description));
       }
-      return cache[key];
+      return cache.get(key)!;
     };
   }, []);
 
@@ -410,7 +495,7 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
     <div className={`forecast ${isAnimating ? 'forecast--animating' : ''}`}>
       <h2 className="forecast__title">5-дневный прогноз</h2>
       <div className="forecast__list">
-        {processedForecasts.map((forecast, index) => {
+        {filteredForecasts.map((forecast, index) => {
           const dayId = getDayId(forecast.date);
           const isHovered = hoveredDay === dayId;
           const positionClass = getPositionClass(index);
@@ -418,6 +503,78 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
           // Мемоизируем почасовые данные только когда они нужны
           const hourlyData = useMemo(() => {
             if (!isHovered) return [];
+            
+            // Получаем сегодняшнюю и завтрашнюю даты для проверки
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            const forecastDateStr = forecast.date.toISOString().split('T')[0];
+            
+            // Проверяем, является ли это сегодняшним или завтрашним днем
+            const isToday = forecastDateStr === today;
+            const isTomorrow = forecastDateStr === tomorrowStr;
+            
+            // Для сегодня и завтра всегда генерируем полный набор часов
+            if (isToday || isTomorrow) {
+              console.log(`Генерируем часы для ${isToday ? 'сегодняшнего' : 'завтрашнего'} дня`, forecastDateStr);
+              
+              // Для сегодняшнего дня показываем часы начиная с текущего часа
+              const startHour = isToday ? now.getHours() : 0;
+              
+              // Создаем полный массив часов с интервалом 3 часа
+              const allHours = [0, 3, 6, 9, 12, 15, 18, 21];
+              
+              // Для сегодня фильтруем только будущие часы
+              const hoursArray = isToday 
+                ? allHours.filter(h => h >= startHour) 
+                : allHours;
+              
+              // Если для сегодня не осталось часов, добавим текущий час
+              if (isToday && hoursArray.length === 0) {
+                const currentHour = startHour;
+                hoursArray.push(currentHour);
+                
+                // Добавим еще оставшиеся часы с шагом 1 час
+                for (let h = currentHour + 1; h < 24; h++) {
+                  hoursArray.push(h);
+                  if (hoursArray.length >= 6) break; // не более 6 часов
+                }
+              }
+              
+              // Получаем базовую иконку и описание
+              const baseIcon = forecast.icon.replace(/[dn]$/, '');
+              
+              return hoursArray.map(hour => {
+                // Расчет температуры в зависимости от времени суток
+                let tempFactor = 0;
+                if (hour >= 12 && hour <= 15) {
+                  tempFactor = 1; // Пик температуры днем
+                } else if (hour >= 3 && hour <= 6) {
+                  tempFactor = -1; // Минимум температуры ночью
+                } else if ((hour >= 9 && hour < 12) || (hour > 15 && hour <= 18)) {
+                  tempFactor = 0.5; // Переходные периоды
+                } else {
+                  tempFactor = -0.5; // Вечер и ночь
+                }
+                
+                const tempSpread = forecast.temp_max - forecast.temp_min;
+                const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                const temp = midTemp + tempFactor * (tempSpread / 2);
+                
+                // Определяем, день это или ночь
+                const isDaytime = hour >= 6 && hour < 19;
+                const hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
+                
+                return {
+                  hour,
+                  temp: Math.round(temp),
+                  icon: hourIcon,
+                  description: forecast.description
+                };
+              });
+            }
             
             if (dailyForecasts && !data) {
               const today = new Date().toISOString().split('T')[0];
@@ -450,13 +607,25 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
                   };
                 });
               } else {
-                // Для других дней - сокращаем количество часов для мобильных
-                const hoursPerDay = isMobile.current ? 12 : 24;
-                const step = 24 / hoursPerDay;
-                return Array.from({ length: hoursPerDay }).map((_, idx) => {
-                  const hour = Math.floor(idx * step);
-                  const tempVariation = Math.sin(hour / 24 * Math.PI) * 3;
+                // Для других дней - генерируем почасовые данные равномерно в течение суток
+                const hoursArray = [0, 3, 6, 9, 12, 15, 18, 21]; // Фиксированный набор часов через каждые 3 часа
+                return hoursArray.map(hour => {
+                  // Вычисляем температуру на основе времени суток
+                  // Самая низкая температура ночью (3-6), самая высокая днем (12-15)
+                  let tempFactor = 0;
+                  if (hour >= 12 && hour <= 15) {
+                    tempFactor = 1; // Пик температуры днем
+                  } else if (hour >= 3 && hour <= 6) {
+                    tempFactor = -1; // Минимум температуры ночью
+                  } else if ((hour >= 9 && hour < 12) || (hour > 15 && hour <= 18)) {
+                    tempFactor = 0.5; // Переходные периоды
+                  } else {
+                    tempFactor = -0.5; // Вечер и ночь
+                  }
+                  
+                  const tempSpread = forecast.temp_max - forecast.temp_min;
                   const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  const temp = midTemp + tempFactor * (tempSpread / 2);
                   
                   // Определяем, день это или ночь, на основе часа
                   const isDaytime = hour >= 6 && hour < 19;
@@ -466,16 +635,126 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
                   
                   return {
                     hour,
-                    temp: Math.round(midTemp + tempVariation),
+                    temp: Math.round(temp),
                     icon: hourIcon,
                     description: forecast.description
                   };
                 });
               }
             } else if (data) {
+              // Получаем ID текущего дня для сравнения
+              const now = new Date();
+              const today = now.toISOString().split('T')[0];
+              const tomorrowDate = new Date(now);
+              tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+              const tomorrowDateStr = tomorrowDate.toISOString().split('T')[0];
+              const forecastDayStr = getDayId(forecast.date);
+              
+              // Проверяем, это сегодняшний или завтрашний день?
+              const isToday = forecastDayStr === today;
+              const isTomorrow = forecastDayStr === tomorrowDateStr;
+              
+              // Для сегодняшнего или завтрашнего дня всегда используем фиксированный набор часов
+              if (isToday || isTomorrow) {
+                console.log(`Генерируем часы для ${isToday ? 'сегодняшнего' : 'завтрашнего'} дня`, forecastDayStr);
+                
+                // Для сегодняшнего дня показываем часы начиная с текущего часа
+                const startHour = isToday ? now.getHours() : 0;
+                
+                // Создаем полный массив часов с интервалом 3 часа
+                const allHours = [0, 3, 6, 9, 12, 15, 18, 21];
+                
+                // Для сегодня фильтруем только будущие часы
+                const hoursArray = isToday 
+                  ? allHours.filter(h => h >= startHour) 
+                  : allHours;
+                
+                // Если для сегодня не осталось часов, добавим текущий час
+                if (isToday && hoursArray.length === 0) {
+                  const currentHour = startHour;
+                  hoursArray.push(currentHour);
+                  
+                  // Добавим еще оставшиеся часы с шагом 1 час
+                  for (let h = currentHour + 1; h < 24; h++) {
+                    hoursArray.push(h);
+                    if (hoursArray.length >= 6) break; // не более 6 часов
+                  }
+                }
+                
+                // Получаем базовую иконку и описание
+                const baseIcon = forecast.icon.replace(/[dn]$/, '');
+                
+                return hoursArray.map(hour => {
+                  // Расчет температуры в зависимости от времени суток
+                  let tempFactor = 0;
+                  if (hour >= 12 && hour <= 15) {
+                    tempFactor = 1; // Пик температуры днем
+                  } else if (hour >= 3 && hour <= 6) {
+                    tempFactor = -1; // Минимум температуры ночью
+                  } else if ((hour >= 9 && hour < 12) || (hour > 15 && hour <= 18)) {
+                    tempFactor = 0.5; // Переходные периоды
+                  } else {
+                    tempFactor = -0.5; // Вечер и ночь
+                  }
+                  
+                  const tempSpread = forecast.temp_max - forecast.temp_min;
+                  const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  const temp = midTemp + tempFactor * (tempSpread / 2);
+                  
+                  // Определяем, день это или ночь
+                  const isDaytime = hour >= 6 && hour < 19;
+                  const hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
+                  
+                  return {
+                    hour,
+                    temp: Math.round(temp),
+                    icon: hourIcon,
+                    description: forecast.description
+                  };
+                });
+              }
+              
+              // Для других дней используем стандартную логику или генерируем часы если API не вернул
               const hourlyItems = getHourlyData(forecast.date);
-              // Ограничиваем количество элементов для мобильных устройств
-              return isMobile.current ? hourlyItems.slice(0, 12) : hourlyItems;
+              
+              // Если API вернул данные, используем их
+              if (hourlyItems.length > 0) {
+                // Ограничиваем количество элементов для мобильных устройств
+                return isMobile.current ? hourlyItems.slice(0, 12) : hourlyItems;
+              } else {
+                // Если API не вернул данные, генерируем фиксированные часы
+                const hoursArray = [0, 3, 6, 9, 12, 15, 18, 21];
+                
+                return hoursArray.map(hour => {
+                  // Имитируем изменение температуры в течение дня
+                  let tempFactor = 0;
+                  if (hour >= 12 && hour <= 15) {
+                    tempFactor = 1; // Пик температуры днем
+                  } else if (hour >= 3 && hour <= 6) {
+                    tempFactor = -1; // Минимум температуры ночью
+                  } else if ((hour >= 9 && hour < 12) || (hour > 15 && hour <= 18)) {
+                    tempFactor = 0.5; // Переходные периоды
+                  } else {
+                    tempFactor = -0.5; // Вечер и ночь
+                  }
+                  
+                  const tempSpread = forecast.temp_max - forecast.temp_min;
+                  const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  const temp = midTemp + tempFactor * (tempSpread / 2);
+                  
+                  // Определяем, день это или ночь
+                  const isDaytime = hour >= 6 && hour < 19;
+                  const baseIcon = forecast.icon.replace(/[dn]$/, '');
+                  const hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
+                  
+                  return {
+                    hour,
+                    temp: Math.round(temp),
+                    icon: hourIcon,
+                    description: forecast.description
+                  };
+                });
+              }
             }
             
             return [];
@@ -498,10 +777,27 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
                   <img 
                     src={iconUrlMemo(forecast.icon, true, forecast.description)} 
                     alt={forecast.description}
-                    loading={index < 3 ? "eager" : "lazy"}
+                    loading="eager" 
                     width="50"
                     height="50"
-                    fetchPriority={index < 2 ? "high" : "auto"}
+                    fetchPriority="high"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      // Всего одна попытка перезагрузки
+                      if (!target.src.includes('?retry=true')) {
+                        target.src = `${iconUrlMemo(forecast.icon, true, forecast.description)}?retry=true`;
+                      } else {
+                        // Если повторная загрузка не удалась, показываем текстовую замену
+                        target.style.display = 'none';
+                        const container = target.parentElement;
+                        if (container) {
+                          const fallback = document.createElement('div');
+                          fallback.className = 'forecast__icon-fallback';
+                          fallback.textContent = forecast.description.slice(0, 1).toUpperCase();
+                          container.appendChild(fallback);
+                        }
+                      }
+                    }}
                   />
                 </div>
                 <div className="forecast__description">
@@ -527,12 +823,12 @@ const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
                       {hourlyData.length > 0 ? (
                         hourlyData.map((hour, idx) => (
                           <div key={idx} className="forecast__hourly-item">
-                            <span className="forecast__hourly-hour">{hour.hour}:00</span>
+                            <span className="forecast__hourly-hour">{hour.hour.toString().padStart(2, '0')}:00</span>
                             <img 
                               src={iconUrlMemo(hour.icon, false, hour.description)} 
                               alt={hour.description} 
                               className="forecast__hourly-icon"
-                              loading="lazy"
+                              loading={idx < 4 ? "eager" : "lazy"}
                               width="30"
                               height="30" 
                             />

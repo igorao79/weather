@@ -175,7 +175,7 @@ export const transformForecastData = (forecast: ForecastData): DailyForecast[] =
   });
   
   // Преобразование в массив и выбор наиболее частой иконки
-  return Object.keys(dailyData).slice(0, 5).map(day => {
+  return Object.keys(dailyData).slice(0, 6).map(day => {
     const data = dailyData[day];
     const dayName = new Date(day).toLocaleDateString('ru-RU', { weekday: 'short' });
     
