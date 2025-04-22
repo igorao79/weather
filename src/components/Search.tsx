@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import '../styles/components/search.scss';
 
 interface SearchProps {
@@ -7,7 +7,8 @@ interface SearchProps {
   isLoading: boolean;
 }
 
-const Search = ({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
+// Используем memo для предотвращения ненужных ререндеров компонента
+const Search = memo(({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
   const [city, setCity] = useState('');
   const [isMobile, setIsMobile] = useState(false);
 
@@ -20,11 +21,18 @@ const Search = ({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
     // Проверяем при загрузке
     checkMobile();
     
-    // Слушаем изменение размера окна
-    window.addEventListener('resize', checkMobile);
+    // Слушаем изменение размера окна с дебаунсингом
+    let resizeTimer: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(checkMobile, 150);
+    };
+    
+    window.addEventListener('resize', handleResize);
     
     return () => {
-      window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimer);
     };
   }, []);
 
@@ -37,7 +45,8 @@ const Search = ({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
   };
 
   const handleLocationClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault(); // Предотвращаем перезагрузку страницы
+    e.preventDefault(); // Prevent page refresh
+    e.stopPropagation(); // Stop event propagation
     onLocationSearch();
   };
 
@@ -81,6 +90,6 @@ const Search = ({ onSearch, onLocationSearch, isLoading }: SearchProps) => {
       </form>
     </div>
   );
-};
+});
 
 export default Search; 

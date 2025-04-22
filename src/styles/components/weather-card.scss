@@ -4,7 +4,7 @@
 
   background-color: var(--primary-color);
   border-radius: 16px;
-  padding: 5px 10px;
+  padding: 2px 10px;
   box-shadow: var(--shadow);
   margin-bottom: 10px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -12,20 +12,8 @@
   overflow: hidden;
   backdrop-filter: blur(5px);
   background-color: rgba(30, 33, 58, 0.8);
-  isolation: isolate; /* Создает новый контекст наложения, помогает с z-index и производительностью */
-  -webkit-mask-image: -webkit-radial-gradient(white, black); /* Исправляет проблему с overflow на iOS */
   
-  /* Предотвращаем появление черного прямоугольника при скроллинге */
-  &::before {
-    content: '';
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    right: -2px;
-    bottom: -2px;
-    background-color: var(--primary-color);
-    z-index: -2;
-  }
+
   
   &__map {
     position: absolute;
@@ -35,11 +23,6 @@
     height: 100%;
     z-index: -1;
     overflow: hidden;
-    -webkit-backface-visibility: hidden; /* Оптимизирует производительность на iOS */
-    backface-visibility: hidden;
-    -webkit-transform: translateZ(0); /* Включает GPU-ускорение на iOS */
-    transform: translateZ(0);
-    will-change: transform; /* Оптимизирует производительность анимаций */
     
     &::after {
       content: '';
@@ -51,8 +34,6 @@
       background: linear-gradient(rgba(30, 33, 58, 0.4), rgba(30, 33, 58, 0.9));
       z-index: 1;
       pointer-events: none;
-      -webkit-backface-visibility: hidden;
-      backface-visibility: hidden;
     }
     
     iframe {
@@ -60,15 +41,9 @@
       height: 110%; /* Немного больше для компенсации масштабирования */
       opacity: 0.6;
       filter: grayscale(50%) contrast(110%) brightness(60%);
-      transform: scale(1.1) translateZ(0); /* Небольшое увеличение карты для заполнения контейнера + GPU ускорение */
+      transform: scale(1.1); /* Небольшое увеличение карты для заполнения контейнера */
       transition: all 0.3s ease;
       pointer-events: none; /* Отключаем взаимодействие с картой в фоне */
-      -webkit-backface-visibility: hidden;
-      backface-visibility: hidden;
-      will-change: transform;
-      z-index: -1;
-      -webkit-transform-style: preserve-3d;
-      transform-style: preserve-3d;
     }
     
     &--loading {
@@ -293,60 +268,42 @@
   // Стили для почасового прогноза
   &__hourly {
     width: 100%;
-    overflow: hidden;
-    position: relative;
     
-    @media (max-width: 767px) {
-      margin: 10px 0;
-      padding: 5px 0;
+    &-title {
+      font-size: 0.8rem;
+      font-weight: 500;
+      margin-bottom: 15px;
+      display: block;
+      color: var(--text-color);
+      text-align: left;
+      padding-left: 10px;
     }
   }
   
   &__hours {
     display: flex;
-    width: 100%;
-    margin-top: 8px;
     overflow-x: auto;
-    padding-bottom: 6px;
+    scroll-behavior: smooth;
+    padding: 10px 5px;
+    gap: 15px;
     scrollbar-width: thin;
-    scrollbar-color: var(--highlight-color) transparent;
-    gap: 10px;
-    justify-content: flex-start;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    mask-image: radial-gradient(white, black);
+    -webkit-mask-image: radial-gradient(white, black);
     
-    @media (max-width: 767px) {
-      flex-wrap: nowrap;
-      overflow-x: scroll;
-      -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x mandatory;
-      scroll-padding: 8px;
-      white-space: nowrap;
-      padding: 5px 0 10px 0;
-      margin: 0 -5px;
-      width: calc(100% + 10px);
-      
-      &::before, &::after {
-        content: "";
-        display: block;
-        width: 5px;
-        flex: 0 0 auto;
-      }
-    }
-    
+    /* Custom scrollbar styles */
     &::-webkit-scrollbar {
       height: 3px;
-      
-      @media (max-width: 767px) {
-        height: 2px;
-      }
-    }
-    
-    &::-webkit-scrollbar-track {
-      background: transparent;
+      background-color: transparent;
     }
     
     &::-webkit-scrollbar-thumb {
-      background-color: var(--highlight-color);
-      border-radius: 4px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+    }
+    
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(255, 255, 255, 0.4);
     }
   }
   
@@ -354,46 +311,40 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 60px;
-    padding: 6px 8px;
-    transition: all 0.2s ease;
-    border-radius: 8px;
     flex: 0 0 auto;
-    
-    @media (max-width: 767px) {
-      scroll-snap-align: start;
-      min-width: 65px;
-      flex: 0 0 auto;
-      background-color: rgba(255, 255, 255, 0.05);
-      padding: 8px 6px;
-      margin: 0;
-    }
+    min-width: 60px;
+    padding: 8px 5px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.05);
+    transition: transform 0.2s ease, background-color 0.2s ease;
     
     &:hover {
-      background: rgba(255, 255, 255, 0.1);
-      
-      @media (min-width: 768px) {
-        transform: translateY(-2px);
-      }
+      background-color: rgba(255, 255, 255, 0.1);
     }
     
     &-time {
-      font-size: 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 5px;
       color: var(--light-text-color);
-      margin-bottom: 3px;
     }
     
     &-icon {
-      width: 30px;
-      height: 30px;
-      margin-bottom: 3px;
-      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+      width: 40px;
+      height: 40px;
+      margin: 5px 0;
+      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
+      transition: transform 0.2s ease;
+      
+      &:hover {
+        transform: scale(1.1);
+      }
     }
     
     &-temp {
-      font-size: 0.9rem;
+      font-size: 1rem;
       font-weight: 600;
-      color: var(--text-color);
+      margin-top: 5px;
     }
   }
   

@@ -71,8 +71,17 @@ const getReducedCount = (baseCount: number, isMobile: boolean): number => {
 // Component for sun effect
 const SunEffect = ({ intensity = 1 }) => {
   return (
-    <div className="weather-animation__sun" style={{ opacity: intensity }}>
-      <div className="weather-animation__sun-circle"></div>
+    <div className="weather-animation__sun" style={{ 
+      opacity: intensity,
+      top: '15%',
+      left: '15%',
+      zIndex: 2
+    }}>
+      <div className="weather-animation__sun-circle" style={{ 
+        width: '90px', 
+        height: '90px',
+        boxShadow: intensity > 0.8 ? '0 0 60px 30px rgba(255, 220, 122, 0.7)' : '0 0 40px 20px rgba(255, 220, 122, 0.6)'
+      }}></div>
       <div className="weather-animation__sun-rays"></div>
       <div className="weather-animation__sun-flare"></div>
     </div>
@@ -82,8 +91,16 @@ const SunEffect = ({ intensity = 1 }) => {
 // Component for moon effect
 const MoonEffect = () => {
   return (
-    <div className="weather-animation__moon">
-      <div className="weather-animation__moon-circle"></div>
+    <div className="weather-animation__moon" style={{ 
+      width: '100px', 
+      height: '100px',
+      top: '15%',
+      right: '15%',
+      zIndex: 2
+    }}>
+      <div className="weather-animation__moon-circle" style={{ 
+        boxShadow: '0 0 30px 15px var(--moon-glow)'
+      }}></div>
       <div className="weather-animation__moon-craters"></div>
     </div>
   );
@@ -159,7 +176,7 @@ const SnowEffect = () => {
 };
 
 // Component for clouds effect with continuous cloud generation
-const CloudsEffect = ({ density = 'normal', immediate = false }) => {
+const CloudsEffect = ({ density = 'normal', immediate = false, isSunBehind = false }) => {
   const isMobile = useIsMobile();
   
   // Create cloud groups with different speeds and positions
@@ -173,21 +190,26 @@ const CloudsEffect = ({ density = 'normal', immediate = false }) => {
     return Array.from({ length: count }).map((_, i) => ({
       id: i,
       top: `${5 + Math.random() * 50}%`,
-      left: immediate ? `${Math.random() * 80}%` : `${-30 - Math.random() * 50}%`,
-      opacity: 0.4 + Math.random() * 0.6,
+      // Clouds start from outside the screen (left side)
+      left: immediate ? `${Math.random() * 80}%` : `-${20 + Math.random() * 30}%`,
+      // Увеличиваем прозрачность облаков, чтобы солнце/луна были лучше видны
+      opacity: isSunBehind ? (0.4 + Math.random() * 0.2) : (0.3 + Math.random() * 0.3),
       scale: 0.3 + Math.random() * 1.2,
-      duration: 40 + Math.random() * 80,
+      duration: 60 + Math.random() * 80, // Slower movement for smoother appearance
       delay: immediate ? 0 : Math.random() * 40,
-      zIndex: Math.floor(Math.random() * 3),
+      // Более низкий z-index для облаков
+      zIndex: 1,
+      // Brighter clouds when sun is behind
+      brightness: isSunBehind ? 1.5 : 1,
     }));
-  }, [density, immediate, isMobile]);
+  }, [density, immediate, isMobile, isSunBehind]);
   
   return (
     <div className="weather-animation__clouds">
       {cloudGroups.map((cloud) => (
         <div
           key={cloud.id}
-          className="weather-animation__cloud"
+          className={`weather-animation__cloud ${isSunBehind ? 'weather-animation__cloud--bright' : ''}`}
           style={{
             top: cloud.top,
             left: cloud.left,
@@ -196,6 +218,7 @@ const CloudsEffect = ({ density = 'normal', immediate = false }) => {
             animationDuration: `${cloud.duration}s`,
             animationDelay: `${cloud.delay}s`,
             zIndex: cloud.zIndex,
+            filter: isSunBehind ? `brightness(${cloud.brightness})` : 'none',
           }}
         />
       ))}
@@ -315,6 +338,33 @@ const MistEffect = () => {
 const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weatherData }) => {
   const isMobile = useIsMobile();
   
+  // Clear any lingering sun/moon elements when weather data changes
+  useEffect(() => {
+    if (weatherData) {
+      // Force cleanup of any lingering celestial elements
+      const clearElements = () => {
+        // Remove any extra sun or moon elements if more than one exists
+        const suns = document.querySelectorAll('.weather-animation__sun');
+        if (suns.length > 1) {
+          for (let i = 1; i < suns.length; i++) {
+            suns[i].parentNode?.removeChild(suns[i]);
+          }
+        }
+        
+        const moons = document.querySelectorAll('.weather-animation__moon');
+        if (moons.length > 1) {
+          for (let i = 1; i < moons.length; i++) {
+            moons[i].parentNode?.removeChild(moons[i]);
+          }
+        }
+      };
+      
+      // Run cleanup after a short delay to ensure new elements are in place
+      const timerId = setTimeout(clearElements, 100);
+      return () => clearTimeout(timerId);
+    }
+  }, [weatherData?.name, weatherData?.weather?.[0]?.id]);
+  
   if (!weatherData) return null;
   
   const timeOfDay = getTimeOfDay(weatherData);
@@ -335,28 +385,38 @@ const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weatherData }) =>
   // На мобильных устройствах уменьшаем количество эффектов для повышения производительности
   const showSunMoon = !isMobile || ['clear', 'clouds'].includes(weatherCondition);
   
+  // Проверка, нужно ли показывать солнце в зависимости от погодных условий
+  const shouldShowSun = weatherCondition === 'clear' || weatherCondition === 'clouds';
+  
+  // Определяем, нужно ли показывать солнце за облаками
+  const showSunBehindClouds = weatherCondition === 'clouds';
+  
+  // Определяем, показывать ли солнце или луну, но не оба сразу
+  const showSun = showSunMoon && (timeOfDay === 'day' || timeOfDay === 'morning' || 
+    (timeOfDay === 'evening' && weatherCondition === 'clear')) && shouldShowSun;
+  
+  const showMoon = showSunMoon && (timeOfDay === 'night' || 
+    (timeOfDay === 'evening' && !showSun)); // Показываем луну вечером, только если не показываем солнце
+  
   return (
     <div className={`weather-background weather-background--${weatherCondition} weather-background--${timeOfDay}`}>
       <div className="weather-animation">
-        {/* Day/Night celestial bodies - оптимизировано для мобильных */}
-        {showSunMoon && (timeOfDay === 'day' || timeOfDay === 'morning' || timeOfDay === 'evening') && 
-          (weatherCondition === 'clear' || weatherCondition === 'clouds') && 
-          <SunEffect intensity={sunIntensity} />}
+        {/* День/ночь и небесные тела - оптимизировано для мобильных */}
+        {showSun && <SunEffect intensity={showSunBehindClouds ? 1 : sunIntensity} />}
         
-        {showSunMoon && (timeOfDay === 'night' || (timeOfDay === 'evening' && weatherCondition !== 'clear')) && 
-          <MoonEffect />}
+        {showMoon && <MoonEffect />}
         
         {/* Weather condition effects */}
         {weatherCondition === 'rain' && <RainEffect />}
         {weatherCondition === 'snow' && <SnowEffect />}
         {weatherCondition === 'mist' && <MistEffect />}
         
-        {/* Clouds with different densities based on condition */}
-        {weatherCondition === 'clouds' && <CloudsEffect density="heavy" immediate={true} />}
-        {weatherCondition === 'rain' && <CloudsEffect density="heavy" immediate={true} />}
-        {weatherCondition === 'snow' && <CloudsEffect density="heavy" immediate={true} />}
-        {shouldShowClouds && !isMobile && <CloudsEffect density="light" immediate={needsImmediateElements} />}
-        {weatherCondition === 'storm' && <CloudsEffect density="heavy" immediate={true} />}
+        {/* Облака с разной плотностью в зависимости от погоды */}
+        {weatherCondition === 'clouds' && <CloudsEffect density="normal" immediate={true} isSunBehind={showSunBehindClouds} />}
+        {weatherCondition === 'rain' && <CloudsEffect density="heavy" immediate={true} isSunBehind={showSunBehindClouds} />}
+        {weatherCondition === 'snow' && <CloudsEffect density="heavy" immediate={true} isSunBehind={showSunBehindClouds} />}
+        {shouldShowClouds && !isMobile && <CloudsEffect density="light" immediate={needsImmediateElements} isSunBehind={showSunBehindClouds} />}
+        {weatherCondition === 'storm' && <CloudsEffect density="heavy" immediate={true} isSunBehind={showSunBehindClouds} />}
         
         {/* Night sky stars - уменьшаем на мобильных */}
         {(timeOfDay === 'night' || timeOfDay === 'evening') && 

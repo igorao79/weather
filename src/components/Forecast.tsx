@@ -1,15 +1,49 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { ForecastData, DailyForecast } from '../types';
 import '../styles/components/forecast.scss';
 
 // Кэшированные URL для иконок - вынесено за пределы компонента
 const iconCache = new Map<string, string>();
-const getIconUrl = (iconCode: string, large: boolean = false) => {
+const getIconUrl = (iconCode: string, large: boolean = false, description?: string) => {
+  // Проверяем и корректируем код иконки на основе описания
+  const getActualIconCode = (iconCode: string, description?: string) => {
+    if (description) {
+      const lowerDesc = description.toLowerCase();
+      
+      // Определяем время суток из оригинальной иконки
+      const isDaytime = iconCode.includes('d');
+      const dayNightSuffix = isDaytime ? 'd' : 'n';
+      
+      // Для любого дождя всегда используем иконку обычного дождя (облако с каплями без солнца)
+      if (lowerDesc.includes('дождь') || lowerDesc.includes('ливень') || lowerDesc.includes('осадки')) {
+        // 09d/09n - дождь без солнца, 10d/10n - дождь с солнцем
+        // Всегда возвращаем 09d/09n для всех типов дождя
+        return `09${dayNightSuffix}`;
+      }
+      
+      // Используем более подходящие иконки для частичной облачности
+      if (lowerDesc.includes('переменная облачность') || lowerDesc.includes('облачно с прояснени')) {
+        return `02${dayNightSuffix}`; // 02d и 02n - это иконки с солнцем и небольшой облачностью
+      } else if (lowerDesc.includes('небольшая облачность')) {
+        return `02${dayNightSuffix}`;
+      } else if (lowerDesc.includes('область с прояснени')) {
+        return `02${dayNightSuffix}`;
+      } else if (lowerDesc.includes('ясно')) {
+        return `01${dayNightSuffix}`;
+      } else if (lowerDesc.includes('пасмурно')) {
+        return `04${dayNightSuffix}`;
+      }
+    }
+    return iconCode;
+  };
+
+  // Получаем скорректированный код иконки
+  const actualIconCode = getActualIconCode(iconCode, description);
   const size = large ? '@2x' : '';
-  const key = `${iconCode}${size}`;
+  const key = `${actualIconCode}${size}`;
   
   if (!iconCache.has(key)) {
-    iconCache.set(key, `https://openweathermap.org/img/wn/${iconCode}${size}.png`);
+    iconCache.set(key, `https://openweathermap.org/img/wn/${actualIconCode}${size}.png`);
   }
   
   return iconCache.get(key) as string;
@@ -29,7 +63,8 @@ interface HourlyWeatherData {
   description: string;
 }
 
-const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
+// Используем memo для предотвращения ненужных ререндеров
+const Forecast = memo(({ data, dailyForecasts }: ForecastProps) => {
   // Оптимизировано: использование useRef для состояний, которые не влияют на рендеринг
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
@@ -338,12 +373,12 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
       if (processedForecasts.length && isMounted) {
         // Загружаем иконки всех прогнозов при инициализации
         processedForecasts.forEach((forecast, index) => {
-          const iconKey = forecast.icon + (index < 2 ? '@2x' : '');
+          const iconKey = `${forecast.icon}-${index < 2 ? '@2x' : ''}-${forecast.description}`;
           
           // Проверяем, не загружалась ли иконка ранее
           if (!loadedIcons.has(iconKey)) {
             const img = new Image();
-            img.src = getIconUrl(forecast.icon, index < 2);
+            img.src = getIconUrl(forecast.icon, index < 2, forecast.description);
             loadedIcons.add(iconKey);
           }
         });
@@ -362,10 +397,10 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
   // Мемоизируем генерацию URL иконок для предотвращения лишних запросов
   const iconUrlMemo = useMemo(() => {
     const cache: Record<string, string> = {};
-    return (icon: string, large: boolean) => {
-      const key = `${icon}-${large ? 'large' : 'small'}`;
+    return (icon: string, large: boolean, description?: string) => {
+      const key = `${icon}-${large ? 'large' : 'small'}-${description || ''}`;
       if (!cache[key]) {
-        cache[key] = getIconUrl(icon, large);
+        cache[key] = getIconUrl(icon, large, description);
       }
       return cache[key];
     };
@@ -390,6 +425,9 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
               const isToday = today === forecastDay;
               const currentHour = new Date().getHours();
               
+              // Разбираем базовую погоду из иконки (удаляем суффикс d/n)
+              const baseIcon = forecast.icon.replace(/[dn]$/, '');
+              
               // Генерируем сокращенный набор данных для мобильных устройств
               if (isToday) {
                 const hoursRemaining = Math.min(24 - currentHour, isMobile.current ? 12 : 24);
@@ -397,10 +435,17 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
                   const hour = currentHour + idx;
                   const tempVariation = Math.sin(hour / 24 * Math.PI) * 3;
                   const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  
+                  // Определяем, день это или ночь, на основе часа
+                  const isDaytime = hour >= 6 && hour < 19;
+                  
+                  // Формируем новую иконку с правильным суффиксом времени суток
+                  const hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
+                  
                   return {
                     hour,
                     temp: Math.round(midTemp + tempVariation),
-                    icon: forecast.icon,
+                    icon: hourIcon,
                     description: forecast.description
                   };
                 });
@@ -412,10 +457,17 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
                   const hour = Math.floor(idx * step);
                   const tempVariation = Math.sin(hour / 24 * Math.PI) * 3;
                   const midTemp = (forecast.temp_max + forecast.temp_min) / 2;
+                  
+                  // Определяем, день это или ночь, на основе часа
+                  const isDaytime = hour >= 6 && hour < 19;
+                  
+                  // Формируем новую иконку с правильным суффиксом времени суток
+                  const hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
+                  
                   return {
                     hour,
                     temp: Math.round(midTemp + tempVariation),
-                    icon: forecast.icon,
+                    icon: hourIcon,
                     description: forecast.description
                   };
                 });
@@ -444,7 +496,7 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
                 <div className="forecast__day">{forecast.day}</div>
                 <div className="forecast__icon">
                   <img 
-                    src={iconUrlMemo(forecast.icon, true)} 
+                    src={iconUrlMemo(forecast.icon, true, forecast.description)} 
                     alt={forecast.description}
                     loading={index < 3 ? "eager" : "lazy"}
                     width="50"
@@ -477,7 +529,7 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
                           <div key={idx} className="forecast__hourly-item">
                             <span className="forecast__hourly-hour">{hour.hour}:00</span>
                             <img 
-                              src={iconUrlMemo(hour.icon, false)} 
+                              src={iconUrlMemo(hour.icon, false, hour.description)} 
                               alt={hour.description} 
                               className="forecast__hourly-icon"
                               loading="lazy"
@@ -500,6 +552,51 @@ const Forecast: React.FC<ForecastProps> = ({ data, dailyForecasts }) => {
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Сравниваем данные прогноза для определения необходимости перерисовки
+  
+  // Если не передан data или dailyForecasts в оба набора пропсов, считаем их равными
+  if (!prevProps.data && !nextProps.data && !prevProps.dailyForecasts && !nextProps.dailyForecasts) {
+    return true;
+  }
+  
+  // Если data или dailyForecasts есть только в одном из наборов, перерисовываем
+  if ((!prevProps.data && nextProps.data) || (prevProps.data && !nextProps.data) ||
+      (!prevProps.dailyForecasts && nextProps.dailyForecasts) || (prevProps.dailyForecasts && !nextProps.dailyForecasts)) {
+    return false;
+  }
+  
+  // Проверяем data по id или списку в случае, если dailyForecasts не предоставлены
+  if (prevProps.data && nextProps.data) {
+    // Сравниваем списки прогнозов
+    if (prevProps.data.list?.length !== nextProps.data.list?.length) {
+      return false;
+    }
+    
+    // Сравниваем id города, если он доступен
+    if (prevProps.data.city?.id !== nextProps.data.city?.id) {
+      return false;
+    }
+  }
+  
+  // Проверяем dailyForecasts по дате и температуре, если они предоставлены
+  if (prevProps.dailyForecasts && nextProps.dailyForecasts) {
+    if (prevProps.dailyForecasts.length !== nextProps.dailyForecasts.length) {
+      return false;
+    }
+    
+    // Проверяем первый прогноз для определения, изменились ли данные
+    if (
+      prevProps.dailyForecasts[0]?.day !== nextProps.dailyForecasts[0]?.day ||
+      prevProps.dailyForecasts[0]?.temp_max !== nextProps.dailyForecasts[0]?.temp_max ||
+      prevProps.dailyForecasts[0]?.icon !== nextProps.dailyForecasts[0]?.icon
+    ) {
+      return false;
+    }
+  }
+  
+  // Если все проверки пройдены, считаем пропсы равными и пропускаем ререндер
+  return true;
+});
 
 export default Forecast; 

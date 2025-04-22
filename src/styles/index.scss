@@ -82,13 +82,23 @@ h1, h2, h3, h4, h5, h6 {
   padding: 10px 15px;
   border-radius: 8px;
   margin-bottom: 15px;
-  animation: fadeIn 0.3s ease;
+  animation: fadeInOut 3s ease forwards;
+  opacity: 0;
+  transform: translateY(-20px);
 }
 
 /* Базовая анимация загрузки */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Анимация для сообщений об ошибке с плавным появлением и исчезновением */
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-20px); }
+  10% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
 }
 
 /* Скроллбар */
@@ -471,6 +481,9 @@ h1, h2, h3, h4, h5, h6 {
     position: absolute;
     width: 100%;
     height: 100%;
+    left: 0;
+    top: 0;
+    overflow: hidden;
   }
   
   &__cloud {
@@ -482,6 +495,7 @@ h1, h2, h3, h4, h5, h6 {
     animation: cloudDrift linear infinite;
     /* Start with clouds already in view */
     animation-delay: calc(var(--cloud-speed-multiplier) * -20s) !important;
+    transition: opacity 2s ease-in-out;
     
     &::before, &::after {
       content: '';
@@ -502,6 +516,16 @@ h1, h2, h3, h4, h5, h6 {
       height: 80px;
       top: -30px;
       right: 30px;
+    }
+    
+    /* Модификатор для ярких облаков (солнце за облаками) */
+    &--bright {
+      background-color: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 40px 10px rgba(255, 240, 180, 0.3);
+      
+      &::before, &::after {
+        background-color: rgba(255, 255, 255, 0.85);
+      }
     }
   }
   
@@ -598,8 +622,29 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @keyframes cloudDrift {
-  0% { transform: translateX(var(--cloud-init-position)); }
-  100% { transform: translateX(calc(100vw + 200px)); }
+  0% {
+    transform: translateX(-10vw);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.2;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  30%, 70% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(110vw);
+    opacity: 0;
+  }
 }
 
 @keyframes lightning {
@@ -670,6 +715,30 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes mistDrift {
   0% { transform: translateX(-100px); }
   100% { transform: translateX(100px); }
+}
+
+/* Модификация для погоды с переменной облачностью */
+.weather-background--clouds {
+  .weather-animation__sun {
+    /* Солнце свечение за облаками */
+    &-circle {
+      box-shadow: 0 0 60px 30px rgba(255, 200, 100, 0.7);
+    }
+    
+    &-rays {
+      opacity: 0.6;
+    }
+  }
+  
+  .weather-animation__cloud {
+    /* Полупрозрачные облака для переменной облачности */
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 20px 10px rgba(255, 255, 255, 0.2);
+    
+    &::before, &::after {
+      background-color: rgba(255, 255, 255, 0.8);
+    }
+  }
 }
 
 /* Импорт компонентных стилей */

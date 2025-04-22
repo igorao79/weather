@@ -1,13 +1,47 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import '../styles/components/weather-card.scss';
 import { WeatherData } from '../types';
 
 // Кэширование URL для иконок
 const iconUrlCache = new Map<string, string>();
-const getIconUrl = (iconCode: string, size: string = '@2x.png') => {
-  const cacheKey = `${iconCode}${size}`;
+const getIconUrl = (iconCode: string, size: string = '@2x.png', description?: string) => {
+  // Переопределение иконок для специфичных описаний
+  const getActualIconCode = (iconCode: string, description?: string) => {
+    if (description) {
+      const lowerDesc = description.toLowerCase();
+      
+      // Определяем время суток из оригинальной иконки
+      const isDaytime = iconCode.includes('d');
+      const dayNightSuffix = isDaytime ? 'd' : 'n';
+      
+      // Для любого дождя всегда используем иконку обычного дождя (облако с каплями без солнца)
+      if (lowerDesc.includes('дождь') || lowerDesc.includes('ливень') || lowerDesc.includes('осадки')) {
+        // 09d/09n - дождь без солнца, 10d/10n - дождь с солнцем
+        // Всегда возвращаем 09d/09n для всех типов дождя
+        return `09${dayNightSuffix}`;
+      }
+      
+      // Используем более подходящие иконки для частичной облачности
+      if (lowerDesc.includes('переменная облачность') || lowerDesc.includes('облачно с прояснени')) {
+        return `02${dayNightSuffix}`; // 02d и 02n - это иконки с солнцем и небольшой облачностью
+      } else if (lowerDesc.includes('небольшая облачность')) {
+        return `02${dayNightSuffix}`;
+      } else if (lowerDesc.includes('область с прояснени')) {
+        return `02${dayNightSuffix}`;
+      } else if (lowerDesc.includes('ясно')) {
+        return `01${dayNightSuffix}`;
+      } else if (lowerDesc.includes('пасмурно')) {
+        return `04${dayNightSuffix}`;
+      }
+    }
+    return iconCode;
+  };
+
+  const actualIconCode = getActualIconCode(iconCode, description);
+  const cacheKey = `${actualIconCode}${size}`;
+  
   if (!iconUrlCache.has(cacheKey)) {
-    iconUrlCache.set(cacheKey, `https://openweathermap.org/img/wn/${iconCode}${size}`);
+    iconUrlCache.set(cacheKey, `https://openweathermap.org/img/wn/${actualIconCode}${size}`);
   }
   return iconUrlCache.get(cacheKey) as string;
 };
@@ -28,29 +62,50 @@ interface HourlyWeatherItem {
 // Кэш для URL карт по координатам
 const mapCache: Record<string, string> = {};
 
-const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] }) => {
+// Используем memo для предотвращения ререндеров при неизменных пропсах
+const WeatherCard = memo(({ weatherData, hourlyData = [] }: WeatherCardProps) => {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [mapUrl, setMapUrl] = useState<string | null>(null);
   const [isMapLoading, setIsMapLoading] = useState<boolean>(false);
   const [mapKey, setMapKey] = useState<string>('');
+  // Храним текущую иконку в состоянии компонента, используем null вместо пустой строки
+  const [weatherIconSrc, setWeatherIconSrc] = useState<string | null>(null);
   
   // Сохраняем предыдущие координаты для проверки изменений
   const prevCoordsRef = useRef<{lat: number, lon: number} | null>(null);
   const isMobile = useRef<boolean>(window.innerWidth < 768);
   const timeInterval = useRef<NodeJS.Timeout | null>(null);
-
+  const weatherIconContainerRef = useRef<HTMLDivElement | null>(null);
+  
   // Мемоизируем температуру для предотвращения пересчетов
   const tempC = useMemo(() => 
     Math.round(weatherData.main.temp), 
     [weatherData.main.temp]
   );
   
-  // Мемоизируем URL иконки погоды с кэшированием
-  const iconUrl = useMemo(() => 
-    getIconUrl(weatherData.weather[0].icon), 
-    [weatherData.weather[0].icon]
-  );
-
+  // Обновляем URL иконки когда изменяется иконка погоды или описание
+  useEffect(() => {
+    if (weatherData?.weather && weatherData.weather[0]?.icon) {
+      // Сначала удаляем все существующие изображения, чтобы избежать наложения
+      if (weatherIconContainerRef.current) {
+        const images = weatherIconContainerRef.current.querySelectorAll('img');
+        if (images.length > 0) {
+          // Удаляем все изображения
+          images.forEach(img => {
+            img.parentNode?.removeChild(img);
+          });
+        }
+      }
+      
+      const newIconUrl = getIconUrl(
+        weatherData.weather[0].icon, 
+        '@2x.png', 
+        weatherData.weather[0].description
+      );
+      setWeatherIconSrc(newIconUrl);
+    }
+  }, [weatherData?.weather, weatherData?.name]);
+  
   // Обновление времени с учетом часового пояса города - оптимизированная версия
   useEffect(() => {
     const updateDateTime = () => {
@@ -228,57 +283,48 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
     const hoursRemaining = 24 - currentHour;
     const limit = isMobile.current ? Math.min(12, hoursRemaining) : hoursRemaining;
     
+    // Базовая температура для прогноза
+    const baseTemp = tempC;
+    
     // Создаем массив из оставшихся часов дня (с ограничением для мобильных)
     return Array.from({ length: limit }).map((_, index) => {
-      const hour = currentHour + index;
-      // Небольшие колебания температуры с течением дня
-      const tempAdjustment = Math.sin(hour / 12 * Math.PI) * 2;
+      const hour = (currentHour + index) % 24;
       
-      // Генерируем разные иконки в зависимости от времени суток
+      // Более реалистичная модель температуры
+      // Пик в 14-15 часов, минимум в 4-5 утра
+      // Целый день моделируем синусоидой
+      const timeOfDay = hour / 24; // нормализуем час (0-1)
+      const peakHour = 14 / 24; // пик в 14 часов (нормализованный)
+      
+      // Расстояние от пикового часа (0-0.5)
+      let distFromPeak = Math.abs(timeOfDay - peakHour);
+      if (distFromPeak > 0.5) distFromPeak = 1 - distFromPeak;
+      
+      // Нормализуем к диапазону 0-1, где 0 = пик дня, 1 = глубокая ночь
+      const normalizedDist = distFromPeak * 2;
+      
+      // Амплитуда колебаний температуры (дневной разброс)
+      const amplitude = 5;
+      
+      // Температура с учетом времени суток: теплее днем, холоднее ночью
+      // cos(π*x) дает значения от 1 (x=0) до -1 (x=1)
+      const tempAdjustment = Math.cos(Math.PI * normalizedDist) * amplitude;
+      
+      // Генерируем иконку в зависимости от времени суток
       let hourIcon = weatherIcon;
       
-      // Меняем иконки в зависимости от времени суток для разнообразия
-      // Солнце/ясно сменяется на облачность вечером
-      if (weatherIcon.includes('01') || weatherIcon.includes('02')) {
-        if (hour >= 18 || hour < 6) {
-          hourIcon = hourIcon.replace('d', 'n'); // ночные иконки
-        } else {
-          hourIcon = hourIcon.replace('n', 'd'); // дневные иконки
-        }
-      } 
+      // Разбираем базовую погоду из иконки (удаляем суффикс d/n)
+      const baseIcon = weatherIcon.replace(/[dn]$/, '');
       
-      // Дождь может усиливаться или ослабевать
-      if (weatherIcon.includes('09') || weatherIcon.includes('10')) {
-        // Меняем интенсивность дождя
-        if (index % 3 === 0) {
-          hourIcon = '10d'; // легкий дождь
-        } else if (index % 3 === 1) {
-          hourIcon = '09d'; // умеренный дождь
-        }
-        // День/ночь
-        if (hour >= 18 || hour < 6) {
-          hourIcon = hourIcon.replace('d', 'n');
-        }
-      }
+      // Определяем, день это или ночь, на основе часа
+      const isDaytime = hour >= 6 && hour < 19;
       
-      // Облачность может меняться
-      if (weatherIcon.includes('03') || weatherIcon.includes('04')) {
-        if (index % 3 === 0) {
-          hourIcon = '02d'; // переменная облачность
-        } else if (index % 3 === 1) {
-          hourIcon = '03d'; // облачно
-        } else {
-          hourIcon = '04d'; // пасмурно
-        }
-        // День/ночь
-        if (hour >= 18 || hour < 6) {
-          hourIcon = hourIcon.replace('d', 'n');
-        }
-      }
+      // Формируем новую иконку с правильным суффиксом времени суток
+      hourIcon = baseIcon + (isDaytime ? 'd' : 'n');
       
       return {
         hour,
-        temp: Math.round(tempC + tempAdjustment),
+        temp: Math.round(baseTemp + tempAdjustment),
         icon: hourIcon,
         description
       };
@@ -293,7 +339,7 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
       return hourlyData.slice(0, limit);
     }
     
-    // Создаем заглушку с примерной почасовой температурой на основе текущей 
+    // Создаем примерный почасовой прогноз на основе текущей температуры
     return getHourlyForecast(
       currentCityHour,
       tempC, 
@@ -310,62 +356,37 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
 
   // Предзагрузка иконок погоды
   useEffect(() => {
-    if (!weatherData.weather[0]?.icon) return;
+    if (!weatherData.weather[0]?.icon || !weatherIconSrc) return;
     
     // Предзагружаем основную иконку и первые несколько иконок почасового прогноза
     const preloadIcons = () => {
       const mainIcon = new Image();
-      mainIcon.src = iconUrl;
+      mainIcon.src = weatherIconSrc;
       
       // Для экономии ресурсов предзагружаем только первые 4 иконки
       if (nextHours && nextHours.length > 0) {
         nextHours.slice(0, 4).forEach(hour => {
           const img = new Image();
-          img.src = getIconUrl(hour.icon, '.png');
+          img.src = getIconUrl(hour.icon, '.png', hour.description);
         });
       }
     };
     
     const timerId = setTimeout(preloadIcons, 300);
     return () => clearTimeout(timerId);
-  }, [weatherData.weather, iconUrl, nextHours]);
+  }, [weatherData.weather, weatherIconSrc, nextHours]);
 
   // Обновляем CSS стили для плавных переходов облаков
   useEffect(() => {
-    // Добавим стили для плавной анимации облаков и предотвращения исчезновения карты при прокрутке
+    // Добавим стили для плавной анимации облаков
     const style = document.createElement('style');
     style.textContent = `
-      /* Фикс для предотвращения черного прямоугольника при скролле */
-      body * {
-        transform-style: flat;
-      }
-      
-      .weather-card {
-        contain: layout; /* Улучшает производительность изоляцией */
-        transform-style: flat;
-      }
-      
       .weather-card__map {
         transition: opacity 0.5s ease-in-out;
-        contain: paint; /* Изолирует перерисовку */
-        transform-style: preserve-3d; /* Помогает с GPU-рендерингом */
-        z-index: -1;
       }
-      
       .weather-card__map iframe {
         transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
-        transform: translate3d(0, 0, 0) scale(1.1);
-        will-change: transform;
-        backface-visibility: hidden;
-        z-index: -1;
-        transform-style: preserve-3d;
       }
-      
-      .weather-card__map::after {
-        transform: translateZ(0);
-        will-change: transform;
-      }
-      
       .loading-indicator {
         position: absolute;
         top: 50%;
@@ -378,7 +399,6 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
         justify-content: center;
         width: 100%;
       }
-      
       .loading-indicator::before {
         content: "";
         display: block;
@@ -390,11 +410,9 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
         border-top-color: #fff;
         animation: spin 1s ease-in-out infinite;
       }
-      
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
-      
       @media (max-width: 768px) {
         .location-button {
           aspect-ratio: 1/1;
@@ -406,17 +424,6 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
           border-radius: 50%;
         }
       }
-      
-      /* Скрываем черный прямоугольник при скролле */
-      @media (max-width: 768px) {
-        body {
-          background-color: var(--secondary-color) !important;
-        }
-        
-        .weather-card {
-          background-color: rgba(30, 33, 58, 0.9) !important;
-        }
-      }
     `;
     document.head.appendChild(style);
     
@@ -425,71 +432,21 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
     };
   }, []);
 
-  // Предотвращаем исчезновение карты при скроллинге без изменения глобальных стилей
+  // Cleanup при размонтировании компонента
   useEffect(() => {
-    // Функция для фиксации карты при скролле
-    const handleScroll = () => {
-      const iframes = document.querySelectorAll('.weather-card__map iframe');
-      const cardMaps = document.querySelectorAll('.weather-card__map');
-      const cards = document.querySelectorAll('.weather-card');
-      
-      iframes.forEach((iframe: Element) => {
-        if (iframe instanceof HTMLIFrameElement) {
-          // Обновляем стили для предотвращения исчезновения
-          iframe.style.transform = 'scale(1.1) translateZ(0)';
-          iframe.style.willChange = 'transform';
-        }
-      });
-      
-      // Убеждаемся, что карты не исчезают
-      cardMaps.forEach((map: Element) => {
-        if (map instanceof HTMLElement) {
-          map.style.willChange = 'transform';
-          map.style.transform = 'translateZ(0)';
-        }
-      });
-      
-      // Убеждаемся, что у карточек правильный фон
-      cards.forEach((card: Element) => {
-        if (card instanceof HTMLElement) {
-          card.style.backgroundColor = 'rgba(30, 33, 58, 0.9)';
-        }
-      });
-      
-      // Обновляем боди, чтобы не было черного фона
-      document.body.style.backgroundColor = 'var(--secondary-color)';
-    };
-    
-    // Эффективная подписка на скролл
-    let scrollTimeout: ReturnType<typeof setTimeout>;
-    const throttledScroll = () => {
-      if (!scrollTimeout) {
-        scrollTimeout = setTimeout(() => {
-          handleScroll();
-          scrollTimeout = 0 as unknown as ReturnType<typeof setTimeout>;
-        }, 100);
-      }
-    };
-    
-    window.addEventListener('scroll', throttledScroll, { passive: true });
-    window.addEventListener('touchmove', throttledScroll, { passive: true });
-    window.addEventListener('resize', handleScroll, { passive: true });
-    
-    // Запускаем сразу при монтировании
-    handleScroll();
-    
-    // Регулярно обновляем
-    const intervalId = setInterval(handleScroll, 1000);
-    
     return () => {
-      window.removeEventListener('scroll', throttledScroll);
-      window.removeEventListener('touchmove', throttledScroll);
-      window.removeEventListener('resize', handleScroll);
-      clearInterval(intervalId);
-      clearTimeout(scrollTimeout);
+      // Очищаем интервал обновления времени
+      if (timeInterval.current) {
+        clearInterval(timeInterval.current);
+        timeInterval.current = null;
+      }
+      
+      // Очищаем кэш иконок при размонтировании
+      iconUrlCache.clear();
     };
-  }, [mapUrl]);
+  }, []);
 
+  // Не забываем вернуть JSX в конце компонента
   return (
     <div className="weather-card">
       {isMapLoading ? (
@@ -522,15 +479,18 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
       
       <div className="weather-card__content">
       <div className="weather-card__center">
-        <div className="weather-card__icon">
-          <img 
-            src={iconUrl} 
-            alt={weatherData.weather[0].description} 
-            loading="eager"
-            width="100"
-            height="100"
-            decoding="async"
-          />
+        <div className="weather-card__icon" ref={weatherIconContainerRef}>
+          {weatherIconSrc && (
+            <img 
+              src={weatherIconSrc}
+              alt={weatherData.weather[0].description} 
+              loading="eager"
+              width="100"
+              height="100"
+              decoding="async"
+              key={`weather-icon-${weatherData.name}-${weatherData.weather[0].icon}-${Date.now()}`}
+            />
+          )}
         </div>
         
         <div className="weather-card__temp">
@@ -563,28 +523,53 @@ const WeatherCard: React.FC<WeatherCardProps> = ({ weatherData, hourlyData = [] 
         
         <div className="weather-card__details">
           <div className="weather-card__hourly">
-            <span className="weather-card__detail-label">Почасовой прогноз</span>
+            <span className="weather-card__hourly-title">Почасовой прогноз</span>
             <div className="weather-card__hours">
-              {nextHours.map((hour, index) => (
-                <div key={index} className="weather-card__hour">
-                  <span className="weather-card__hour-time">{hour.hour}:00</span>
-                  <img 
-                    src={getIconUrl(hour.icon, '.png')}
-                    alt={hour.description}
-                    className="weather-card__hour-icon"
-                    loading={index < 4 ? "eager" : "lazy"}
-                    width="30"
-                    height="30"
-                  />
-                  <span className="weather-card__hour-temp">{hour.temp}°</span>
-                </div>
-              ))}
+              {nextHours.map((hour, index) => {
+                const hourlyIconUrl = getIconUrl(hour.icon, '.png', hour.description);
+                return (
+                  <div key={`hour-${index}-${weatherData.name}`} className="weather-card__hour">
+                    <span className="weather-card__hour-time">{hour.hour}:00</span>
+                    <img 
+                      src={hourlyIconUrl}
+                      alt={hour.description}
+                      className="weather-card__hour-icon"
+                      loading={index < 4 ? "eager" : "lazy"}
+                      width="40"
+                      height="40"
+                      decoding="async"
+                      key={`hour-${index}-${hour.icon}-${weatherData.name}-${Date.now()}`}
+                    />
+                    <span className="weather-card__hour-temp">{hour.temp}°</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Обновляем только если изменился город или координаты
+  if (prevProps.weatherData.name !== nextProps.weatherData.name) return false;
+  if (prevProps.weatherData.coord.lat !== nextProps.weatherData.coord.lat) return false;
+  if (prevProps.weatherData.coord.lon !== nextProps.weatherData.coord.lon) return false;
+  
+  // Проверяем количество элементов hourlyData
+  if (prevProps.hourlyData?.length !== nextProps.hourlyData?.length) return false;
+  
+  // Проверяем изменение данных о погоде (температура, описание и т.д.)
+  if (prevProps.weatherData.main.temp !== nextProps.weatherData.main.temp) return false;
+  if (prevProps.weatherData.main.feels_like !== nextProps.weatherData.main.feels_like) return false;
+  if (prevProps.weatherData.main.humidity !== nextProps.weatherData.main.humidity) return false;
+  if (prevProps.weatherData.wind.speed !== nextProps.weatherData.wind.speed) return false;
+  if (prevProps.weatherData.wind.deg !== nextProps.weatherData.wind.deg) return false;
+  if (prevProps.weatherData.weather[0].description !== nextProps.weatherData.weather[0].description) return false;
+  if (prevProps.weatherData.weather[0].icon !== nextProps.weatherData.weather[0].icon) return false;
+  
+  // Если все осталось прежним, пропускаем ререндер
+  return true;
+});
 
 export default WeatherCard; 
